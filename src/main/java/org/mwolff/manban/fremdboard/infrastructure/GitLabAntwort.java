@@ -93,19 +93,31 @@ final class GitLabAntwort {
    * einer internen Notiz ({@code internal}, in älteren Fassungen {@code confidential}).
    */
   static Optional<FremdNotiz> notiz(JsonNode eintrag, long nummer) {
-    if (eintrag.path("system").asBoolean(false)
-        || eintrag.path("internal").asBoolean(false)
-        || eintrag.path(KENNZEICHEN_VERTRAULICH).asBoolean(false)) {
+    if (eintrag.path("system").asBoolean(false) || interneNotiz(eintrag)) {
       return Optional.empty();
     }
     return Optional.of(
         new FremdNotiz(
-            String.valueOf(zahl(eintrag, "id")),
+            notizKennung(eintrag),
             nummer,
             text(eintrag.path("author"), "username"),
             text(eintrag, "body"),
             zeit(eintrag, ANGELEGT),
             zeit(eintrag, "updated_at")));
+  }
+
+  /**
+   * Ob die Notiz in GitLab intern ist ({@code internal}, in älteren Fassungen {@code confidential})
+   * und darum nicht gespiegelt wird; eine schon gespiegelte entfernt der Abgleich (Issue #2200).
+   */
+  static boolean interneNotiz(JsonNode eintrag) {
+    return eintrag.path("internal").asBoolean(false)
+        || eintrag.path(KENNZEICHEN_VERTRAULICH).asBoolean(false);
+  }
+
+  /** Die Kennung einer Notiz, unter der der Spiegel sie wiederfindet. */
+  static String notizKennung(JsonNode eintrag) {
+    return String.valueOf(zahl(eintrag, "id"));
   }
 
   /** Eine ganze Zahl aus {@code feld}. */

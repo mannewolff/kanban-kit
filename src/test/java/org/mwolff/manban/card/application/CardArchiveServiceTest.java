@@ -11,6 +11,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
@@ -615,6 +616,58 @@ class CardArchiveServiceTest {
     InOrder inOrder = inOrder(bestand, cards);
     inOrder.verify(bestand).bewahreHerkunftsnummern(List.of(1L));
     inOrder.verify(cards).deleteById(1L);
+  }
+
+  @Test
+  void vertraulicheEntfernen_entferntTrefferAufDemBoardUndImPapierkorb_ohneRechtepruefung() {
+    // Given: Issue #2200 — Nummer 1 steht auf dem Board, 3 im Papierkorb; 2 ist nicht gemeint,
+    // eine Karte ohne Nummer auch nicht.
+    Card ohneNummer =
+        new Card(
+            4L,
+            BOARD,
+            20L,
+            null,
+            "Titel",
+            null,
+            0,
+            false,
+            null,
+            1L,
+            FIXED,
+            FIXED,
+            CardType.CARD,
+            null,
+            null,
+            null,
+            PROJECT,
+            null,
+            null,
+            null,
+            null);
+    when(cards.findByProjectId(PROJECT))
+        .thenReturn(
+            List.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null),
+                card(2L, 20L, 2, false, null, CardType.CARD, null, null),
+                ohneNummer));
+    when(cards.findTrashByBoardId(BOARD))
+        .thenReturn(List.of(card(3L, 20L, 3, false, null, CardType.CARD, null, null)));
+
+    // When
+    int entfernt = service.vertraulicheEntfernen(PROJECT, BOARD, List.of(1, 3));
+
+    // Then
+    assertThat(entfernt).isEqualTo(2);
+    InOrder inOrder = inOrder(events, bestand, cards);
+    inOrder.verify(events).publishEvent(new CardsPurgedEvent(List.of(1L)));
+    inOrder.verify(bestand).bewahreHerkunftsnummern(List.of(1L));
+    inOrder.verify(cards).deleteById(1L);
+    inOrder.verify(cards).deleteById(3L);
+    verify(dependencies).deleteByCardId(3L);
+    verify(cards, never()).deleteById(2L);
+    verify(cards, never()).deleteById(4L);
+    verifyNoInteractions(permissions);
   }
 
   @Test

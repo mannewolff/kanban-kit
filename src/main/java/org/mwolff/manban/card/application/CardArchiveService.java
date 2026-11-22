@@ -165,6 +165,36 @@ public class CardArchiveService {
     long projectId = boardService.requireProjectId(card.boardId());
     permissions.require(userId, projectId, Permission.BOARD_DELETE);
     grundlage.pruefeSchreibbar(projectId);
+    endgueltigEntfernen(card);
+  }
+
+  /**
+   * Entfernt die Karten des Projekts mit diesen Nummern endgültig, ohne Rechteprüfung und ohne
+   * Schreibsperre: auf dem Board, im Archiv und im Papierkorb des Boards. Allein für den Spiegel
+   * eines fremden Boards, wenn die Karten dort vertraulich sind (Issue #2200, {@link
+   * FremdKartenSchreiber#vertraulicheEntfernen}).
+   *
+   * @return wie viele Karten entfernt wurden
+   */
+  int vertraulicheEntfernen(long projectId, long boardId, List<Integer> nummern) {
+    int entfernt = 0;
+    for (List<Card> karten :
+        List.of(cards.findByProjectId(projectId), cards.findTrashByBoardId(boardId))) {
+      for (Card karte : karten) {
+        if (karte.number() != null && nummern.contains(karte.number())) {
+          endgueltigEntfernen(karte);
+          entfernt++;
+        }
+      }
+    }
+    return entfernt;
+  }
+
+  /**
+   * Entfernt die Karte endgültig, ohne Rechteprüfung und ohne Schreibsperre — auch aus dem
+   * Papierkorb. Kommentare, Verlauf und Messungen gehen mit (Datenbank-Cascade).
+   */
+  private void endgueltigEntfernen(Card card) {
     // Vor dem Delete publizieren (Issue #503): Nachgelagerte Module (Anhänge) planen ihre
     // Aufräum-Aufträge ein, solange die Metadaten existieren — die Cascade nimmt sie gleich mit.
     events.publishEvent(new CardsPurgedEvent(List.of(card.requireId())));

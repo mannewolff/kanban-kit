@@ -9,7 +9,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -37,6 +36,8 @@ import org.mwolff.manban.fremdboard.domain.FremdEreignis;
 import org.mwolff.manban.fremdboard.domain.FremdEreignis.Art;
 import org.mwolff.manban.fremdboard.domain.FremdKarte;
 import org.mwolff.manban.fremdboard.domain.FremdNotiz;
+import org.mwolff.manban.fremdboard.domain.FremdNotizen;
+import org.mwolff.manban.fremdboard.domain.FremdNummern;
 import org.mwolff.manban.fremdboard.domain.StatusLabels;
 import org.mwolff.manban.fremdboard.domain.Verbindung;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -45,6 +46,10 @@ import org.springframework.transaction.PlatformTransactionManager;
  * Abgleich einer Karte gegen gemockte Quelle und Schreibwege (Issue #2167, Plan #2152 A4, A6, A11,
  * A12, A19). Gegen echte Datenbank und nachgestelltes GitLab prüft {@code AbgleichServiceIT}.
  */
+// PMD.ExcessiveImports: Der Abgleich übersetzt vom Port des fremden Systems auf die Fassaden von
+// card und comment (wie AbgleichService selbst); der Test braucht die Werte beider Seiten, seit
+// Issue #2200 auch die nach Vertraulichkeit getrennten Nummern und Notizen.
+@SuppressWarnings("PMD.ExcessiveImports")
 class AbgleichServiceTest {
 
   private static final long PROJEKT = 1L;
@@ -72,6 +77,7 @@ class AbgleichServiceTest {
   private static final FremderAkteur UNBEKANNT = FremderAkteur.von(null, "kit-bot");
   private static final FremderAkteur ANNA = FremderAkteur.von("anna", "kit-bot");
   private static final FremderAkteur KIT = FremderAkteur.von("kit-bot", "kit-bot");
+  private static final FremdNotizen KEINE_NOTIZEN = new FremdNotizen(List.of(), Set.of());
 
   private FremdBoardQuelle quelle;
   private FremdKartenBestand bestand;
@@ -103,6 +109,10 @@ class AbgleichServiceTest {
             Clock.fixed(JETZT, ZoneOffset.UTC));
   }
 
+  private static FremdNummern sichtbar(Long... nummern) {
+    return new FremdNummern(List.of(nummern), List.of());
+  }
+
   private static FremdKarte karte(
       String titel, String text, List<String> labels, boolean zu, Instant angelegt) {
     return new FremdKarte(7, titel, text, labels, zu, angelegt, T2);
@@ -116,7 +126,7 @@ class AbgleichServiceTest {
   private void gitlab(FremdKarte karte, List<FremdEreignis> ereignisse, List<FremdNotiz> notizen) {
     when(quelle.karte(VERBINDUNG, 7)).thenReturn(Optional.of(karte));
     when(quelle.ereignisse(VERBINDUNG, 7)).thenReturn(ereignisse);
-    when(quelle.notizen(VERBINDUNG, 7)).thenReturn(notizen);
+    when(quelle.notizen(VERBINDUNG, 7)).thenReturn(new FremdNotizen(notizen, Set.of()));
   }
 
   @Test
@@ -309,7 +319,7 @@ class AbgleichServiceTest {
         .thenReturn(
             Optional.of(new FremdKarte(7, "Export", "", List.of("Ready"), false, VORHER, VORHER)));
     when(quelle.ereignisse(VERBINDUNG, 7)).thenReturn(List.of());
-    when(quelle.notizen(VERBINDUNG, 7)).thenReturn(List.of());
+    when(quelle.notizen(VERBINDUNG, 7)).thenReturn(KEINE_NOTIZEN);
 
     service.karteAbgleichen(VERBINDUNG, 7);
 
@@ -331,6 +341,28 @@ class AbgleichServiceTest {
     verify(kommentare).spiegeln(70L, new SpiegelNotiz("701", KIT, "## Kette angehalten", T1, T2));
     verify(kommentare).spiegeln(70L, new SpiegelNotiz("702", ANNA, "Antwort", T2, T2));
     verify(kommentare).spiegelFehlendeKennzeichnen(70L, Set.of("701", "702"), JETZT);
+  }
+
+  @Test
+  void notizen_interneWerdenVorDemSpiegelnEntfernt_undZaehlenNichtAlsVorhanden() {
+    // Given: Notiz 702 ist in GitLab intern geworden; die Quelle nennt nur ihre Kennung.
+    FremdNotiz anna = new FremdNotiz("701", 7, "anna", "Freigegeben", T1, T1);
+    when(quelle.karte(VERBINDUNG, 7))
+        .thenReturn(Optional.of(karte("Export", "", List.of(), false, VORHER)));
+    when(quelle.ereignisse(VERBINDUNG, 7)).thenReturn(List.of());
+    when(quelle.notizen(VERBINDUNG, 7)).thenReturn(new FremdNotizen(List.of(anna), Set.of("702")));
+    when(bestand.kartenId(PROJEKT, 7)).thenReturn(Optional.of(70L));
+
+    // When
+    service.karteAbgleichen(VERBINDUNG, 7);
+
+    // Then
+    InOrder reihenfolge = inOrder(kommentare);
+    reihenfolge.verify(kommentare).spiegelVertraulicheEntfernen(70L, Set.of("702"));
+    reihenfolge
+        .verify(kommentare)
+        .spiegeln(70L, new SpiegelNotiz("701", ANNA, "Freigegeben", T1, T1));
+    reihenfolge.verify(kommentare).spiegelFehlendeKennzeichnen(70L, Set.of("701"), JETZT);
   }
 
   @Test
@@ -404,7 +436,7 @@ class AbgleichServiceTest {
         .anlegen(
             BOARD, new FremdeKarte(7, "Export", "", "BACKLOG", ADRESSE), ANGEBUNDEN, UNBEKANNT);
     verify(schreiber).labelSetzen(BOARD, 7, "kit:night", ANGEBUNDEN, UNBEKANNT);
-    verify(schreiber, times(1)).labelSetzen(anyLong(), anyInt(), anyString(), any(), any());
+    verify(schreiber).labelSetzen(anyLong(), anyInt(), anyString(), any(), any());
   }
 
   @Test
@@ -433,7 +465,7 @@ class AbgleichServiceTest {
     when(quelle.geaenderteKarten(VERBINDUNG, T1)).thenReturn(List.of(geaendert));
     when(quelle.ereignisse(VERBINDUNG, 7))
         .thenReturn(List.of(ereignis("label-1", Art.LABEL_GESETZT, "Ready", T2, "anna")));
-    when(quelle.notizen(VERBINDUNG, 7)).thenReturn(List.of());
+    when(quelle.notizen(VERBINDUNG, 7)).thenReturn(KEINE_NOTIZEN);
     when(bestand.kartenId(PROJEKT, 7)).thenReturn(Optional.of(70L));
 
     // When
@@ -451,13 +483,13 @@ class AbgleichServiceTest {
     // Given: hier gespiegelt sind 7 und 9; in GitLab gibt es 7 (geändert) und 8 (noch nicht
     // gespiegelt), 9 ist gelöscht.
     when(bestand.nummern(PROJEKT)).thenReturn(List.of(7, 9));
-    when(quelle.nummern(VERBINDUNG)).thenReturn(List.of(7L, 8L));
+    when(quelle.nummern(VERBINDUNG)).thenReturn(sichtbar(7L, 8L));
     when(quelle.geaenderteKarten(VERBINDUNG, T1))
         .thenReturn(List.of(karte("Export", "", List.of(), false, VORHER)));
     FremdKarte acht = new FremdKarte(8, "Import", "", List.of(), false, VORHER, VORHER);
     when(quelle.karte(VERBINDUNG, 8)).thenReturn(Optional.of(acht));
     when(quelle.ereignisse(eq(VERBINDUNG), anyLong())).thenReturn(List.of());
-    when(quelle.notizen(eq(VERBINDUNG), anyLong())).thenReturn(List.of());
+    when(quelle.notizen(eq(VERBINDUNG), anyLong())).thenReturn(KEINE_NOTIZEN);
     when(bestand.kartenId(PROJEKT, 7)).thenReturn(Optional.of(70L));
     when(bestand.kartenId(PROJEKT, 8)).thenReturn(Optional.empty());
 
@@ -476,6 +508,37 @@ class AbgleichServiceTest {
     verify(schreiber).alsGeloeschtMarkieren(BOARD, 9, JETZT);
     verify(schreiber, never()).alsGeloeschtMarkieren(BOARD, 7, JETZT);
     verify(schreiber, never()).alsGeloeschtMarkieren(BOARD, 8, JETZT);
+  }
+
+  @Test
+  void voll_entferntVertraulicheKarten_vorJedemWeiterenAbruf_stattSieAlsGeloeschtZuMarkieren() {
+    // Given: hier gespiegelt sind 7 und 9; in GitLab ist 9 inzwischen vertraulich. Eine Nummer
+    // jenseits des Zahlenbereichs der Karten kann es hier nicht geben.
+    when(bestand.nummern(PROJEKT)).thenReturn(List.of(7, 9));
+    when(quelle.nummern(VERBINDUNG))
+        .thenReturn(new FremdNummern(List.of(7L), List.of(9L, Integer.MAX_VALUE + 1L)));
+    when(quelle.geaenderteKarten(VERBINDUNG, T1)).thenReturn(List.of());
+
+    // When
+    service.vollAbgleichen(VERBINDUNG, T1);
+
+    // Then
+    InOrder reihenfolge = inOrder(schreiber, quelle);
+    reihenfolge.verify(schreiber).vertraulicheEntfernen(BOARD, List.of(9));
+    reihenfolge.verify(quelle).geaenderteKarten(VERBINDUNG, T1);
+    verify(schreiber, never()).alsGeloeschtMarkieren(anyLong(), anyInt(), any());
+    verify(quelle, never()).karte(any(), anyLong());
+  }
+
+  @Test
+  void voll_ohneVertraulicheKarten_entferntNichts() {
+    when(bestand.nummern(PROJEKT)).thenReturn(List.of(7));
+    when(quelle.nummern(VERBINDUNG)).thenReturn(sichtbar(7L));
+    when(quelle.geaenderteKarten(VERBINDUNG, T1)).thenReturn(List.of());
+
+    service.vollAbgleichen(VERBINDUNG, T1);
+
+    verifyNoInteractions(schreiber);
   }
 
   @Test
@@ -498,12 +561,12 @@ class AbgleichServiceTest {
   void voll_liestEinzelnNur_wasWederGeaendertNochHierGespiegeltIst() {
     // Given: 7 ist dort neu und geändert, 8 ist hier gespiegelt und unverändert, 9 fehlt hier
     when(bestand.nummern(PROJEKT)).thenReturn(List.of(8));
-    when(quelle.nummern(VERBINDUNG)).thenReturn(List.of(7L, 8L, 9L));
+    when(quelle.nummern(VERBINDUNG)).thenReturn(sichtbar(7L, 8L, 9L));
     when(quelle.geaenderteKarten(VERBINDUNG, T1))
         .thenReturn(List.of(karte("Export", "", List.of(), false, VORHER)));
     when(quelle.karte(VERBINDUNG, 9)).thenReturn(Optional.empty());
     when(quelle.ereignisse(eq(VERBINDUNG), anyLong())).thenReturn(List.of());
-    when(quelle.notizen(eq(VERBINDUNG), anyLong())).thenReturn(List.of());
+    when(quelle.notizen(eq(VERBINDUNG), anyLong())).thenReturn(KEINE_NOTIZEN);
     when(bestand.kartenId(PROJEKT, 7)).thenReturn(Optional.empty());
 
     // When
@@ -519,7 +582,7 @@ class AbgleichServiceTest {
   @Test
   void voll_eineEinzelnGeleseneKarteDieInzwischenFehlt_bleibtUnberuehrt() {
     when(bestand.nummern(PROJEKT)).thenReturn(List.of());
-    when(quelle.nummern(VERBINDUNG)).thenReturn(List.of(8L));
+    when(quelle.nummern(VERBINDUNG)).thenReturn(sichtbar(8L));
     when(quelle.geaenderteKarten(VERBINDUNG, T1)).thenReturn(List.of());
     when(quelle.karte(VERBINDUNG, 8)).thenReturn(Optional.empty());
 

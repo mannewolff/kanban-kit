@@ -10,6 +10,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.fremdboard.domain.FremdKarte;
 import org.mwolff.manban.fremdboard.domain.FremdNotiz;
+import org.mwolff.manban.fremdboard.domain.FremdNotizen;
+import org.mwolff.manban.fremdboard.domain.FremdNummern;
 
 /**
  * Der Angriff aus Issue #2195: Der hinterlegte GitLab-Zugang des Spiegels darf vertrauliche Issues
@@ -39,13 +41,17 @@ class GitLabQuelleVertraulichTest {
   }
 
   @Test
-  void nummern_lassenVertraulicheIssuesAus() {
+  void nummern_nennenVertraulicheIssuesGetrennt() {
     // Given: Der Zugang sieht das vertrauliche Issue 9, das Mitglied in GitLab nicht.
     gitlab.antworte(ISSUES + 1, 200, "[" + issue(7, false) + "," + issue(9, true) + "]", "");
 
-    // When / Then: Eine schon gespiegelte Karte 9 fehlt damit dort und wandert beim
-    // Vollabgleich in den Papierkorb.
-    assertThat(quelle.nummern(gitlab.verbindung())).containsExactly(7L);
+    // When
+    FremdNummern nummern = quelle.nummern(gitlab.verbindung());
+
+    // Then: Karte 9 wird nicht gespiegelt; ihre Nummer ist ausdrücklich als vertraulich übertragen,
+    // damit der Vollabgleich eine schon gespiegelte Kopie entfernt (Issue #2200).
+    assertThat(nummern.sichtbar()).containsExactly(7L);
+    assertThat(nummern.vertraulich()).containsExactly(9L);
   }
 
   @Test
@@ -83,7 +89,7 @@ class GitLabQuelleVertraulichTest {
   }
 
   @Test
-  void notizen_lassenInterneUndVertraulicheNotizenAus() {
+  void notizen_nennenInterneUndVertraulicheNotizenNurMitKennung() {
     // Given: "internal" seit GitLab 15, "confidential" der frühere Name desselben Kennzeichens.
     gitlab.antworte(
         NOTIZEN + 1,
@@ -99,10 +105,13 @@ class GitLabQuelleVertraulichTest {
             + "]",
         "");
 
-    // When / Then: Nur die öffentliche Notiz wird zum Kommentar.
-    assertThat(quelle.notizen(gitlab.verbindung(), 7))
-        .extracting(FremdNotiz::kennung)
-        .containsExactly("804");
+    // When
+    FremdNotizen notizen = quelle.notizen(gitlab.verbindung(), 7);
+
+    // Then: Nur die öffentliche Notiz wird zum Kommentar; von den übrigen verlässt allein die
+    // Kennung die Quelle, damit der Abgleich schon gespiegelte entfernt (Issue #2200).
+    assertThat(notizen.sichtbar()).extracting(FremdNotiz::kennung).containsExactly("804");
+    assertThat(notizen.vertraulich()).containsExactlyInAnyOrder("801", "802", "803");
   }
 
   private static String issue(long nummer, boolean vertraulich) {

@@ -186,6 +186,29 @@ public class CommentService {
     }
   }
 
+  /**
+   * Entfernt die gespiegelten Kommentare der Karte mit diesen Kennungen endgültig, weil die Notizen
+   * im fremden System intern sind (Issue #2200): Der Zugang des Spiegels darf dort mehr lesen als
+   * ein Mitglied des Projekts. Anders als bei einer gelöschten Notiz ({@link #spiegelGeloescht})
+   * bleibt auch eine Meldung des Kits nicht stehen. Eine nicht übernommene Kennung ist kein Fehler.
+   * Ohne Rechteprüfung wie {@link #spiegeln}.
+   *
+   * @param kennungen Kennungen der internen Notizen im fremden System
+   * @throws IllegalStateException wenn das Projekt der Karte kein fremdes Board hat
+   */
+  @Transactional
+  public void spiegelVertraulicheEntfernen(long cardId, Collection<String> kennungen) {
+    if (kennungen.isEmpty()) {
+      return;
+    }
+    pruefeFremd(cardId);
+    for (String kennung : kennungen) {
+      comments
+          .findByCardIdAndExternKennung(cardId, kennung)
+          .ifPresent(kommentar -> comments.deleteById(kommentar.requireId()));
+    }
+  }
+
   private void pruefeFremd(long cardId) {
     long projectId = cardService.requireProjectId(cardId);
     if (!boardQuelle.istFremd(projectId)) {

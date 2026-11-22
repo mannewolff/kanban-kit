@@ -21,6 +21,7 @@ import org.mwolff.manban.fremdboard.domain.FremdBoardArt;
 import org.mwolff.manban.fremdboard.domain.FremdEreignis;
 import org.mwolff.manban.fremdboard.domain.FremdKarte;
 import org.mwolff.manban.fremdboard.domain.FremdNotiz;
+import org.mwolff.manban.fremdboard.domain.FremdNotizen;
 import org.slf4j.LoggerFactory;
 
 /**
@@ -78,7 +79,7 @@ class GitLabQuelleTest {
     gitlab.antworte(ISSUES + 1, 200, datei("issues-seite-1.json"), "");
 
     // When
-    List<Long> nummern = quelle.nummern(gitlab.verbindung());
+    List<Long> nummern = quelle.nummern(gitlab.verbindung()).sichtbar();
 
     // Then
     assertThat(nummern).containsExactly(7L, 8L);
@@ -93,7 +94,7 @@ class GitLabQuelleTest {
     gitlab.antworte(ISSUES + 2, 200, datei("issues-seite-2.json"), "");
 
     // When
-    List<Long> nummern = quelle.nummern(gitlab.verbindung());
+    List<Long> nummern = quelle.nummern(gitlab.verbindung()).sichtbar();
 
     // Then
     assertThat(nummern).containsExactly(7L, 8L, 11L);
@@ -106,7 +107,7 @@ class GitLabQuelleTest {
     gitlab.antworte(ISSUES + 1, 200, datei("issues-seite-1.json"), null);
 
     // When / Then
-    assertThat(quelle.nummern(gitlab.verbindung())).containsExactly(7L, 8L);
+    assertThat(quelle.nummern(gitlab.verbindung()).sichtbar()).containsExactly(7L, 8L);
   }
 
   @Test
@@ -115,7 +116,7 @@ class GitLabQuelleTest {
     gitlab.antworte("/gitlab" + ISSUES + 1, 200, "[]", "");
 
     // When
-    List<Long> nummern = quelle.nummern(gitlab.verbindung(gitlab.basis() + "/gitlab/"));
+    List<Long> nummern = quelle.nummern(gitlab.verbindung(gitlab.basis() + "/gitlab/")).sichtbar();
 
     // Then
     assertThat(nummern).isEmpty();
@@ -242,10 +243,11 @@ class GitLabQuelleTest {
     gitlab.antworte(NOTIZEN + 1, 200, datei("notes-7.json"), "");
 
     // When
-    List<FremdNotiz> notizen = quelle.notizen(gitlab.verbindung(), 7);
+    FremdNotizen notizen = quelle.notizen(gitlab.verbindung(), 7);
 
     // Then
-    assertThat(notizen)
+    assertThat(notizen.vertraulich()).isEmpty();
+    assertThat(notizen.sichtbar())
         .containsExactly(
             new FremdNotiz(
                 "701",
