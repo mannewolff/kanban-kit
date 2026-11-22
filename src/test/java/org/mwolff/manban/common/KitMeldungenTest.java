@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -75,7 +76,24 @@ class KitMeldungenTest {
           Arguments.of(Zeile.GEKLAERTER_STAND, "## Geklärter Stand"),
           Arguments.of(Zeile.GEKLAERTER_STAND, "## Clarified state"),
           Arguments.of(Zeile.ERGEBNIS, "Ergebnis:"),
-          Arguments.of(Zeile.ERGEBNIS, "Result:"));
+          Arguments.of(Zeile.ERGEBNIS, "Result:"),
+          // Köpfe und Zeilen der Rückfragen und Gespräche (Issue #2208, Plan #2206 E9).
+          Arguments.of(Zeile.RUECKFRAGE, "## Rückfrage"),
+          Arguments.of(Zeile.RUECKFRAGE, "## Question"),
+          Arguments.of(Zeile.ANTWORT, "## Antwort"),
+          Arguments.of(Zeile.ANTWORT, "## Answer"),
+          Arguments.of(Zeile.GESPRAECH, "## Gespräch"),
+          Arguments.of(Zeile.GESPRAECH, "## Conversation"),
+          Arguments.of(Zeile.KARTENPRUEFUNG, "## Kartenprüfung"),
+          Arguments.of(Zeile.KARTENPRUEFUNG, "## Card check"),
+          Arguments.of(Zeile.BEIM_ANBIETER, "## Beim Anbieter"),
+          Arguments.of(Zeile.BEIM_ANBIETER, "## With the provider"),
+          Arguments.of(Zeile.SEIT, "Seit:"),
+          Arguments.of(Zeile.SEIT, "Since:"),
+          Arguments.of(Zeile.VORSCHAU, "Vorschau:"),
+          Arguments.of(Zeile.VORSCHAU, "Preview:"),
+          Arguments.of(Zeile.VON, "Von:"),
+          Arguments.of(Zeile.VON, "From:"));
 
   /** Die Werte wörtlich aus {@code MELDUNG_WERTE}, Kit 6.1.3. */
   private static final List<Arguments> WERTE =
@@ -164,6 +182,34 @@ class KitMeldungenTest {
             "## Code review (step 6)",
             "## Code-Review (Schritt 7)",
             "## Code review (step 7)");
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      value = {
+        "RUECKFRAGE|## Rückfrage|## Question",
+        "ANTWORT|## Antwort|## Answer",
+        "GESPRAECH|## Gespräch|## Conversation",
+        "KARTENPRUEFUNG|## Kartenprüfung|## Card check",
+        "BEIM_ANBIETER|## Beim Anbieter|## With the provider",
+        "SEIT|Seit:|Since:",
+        "VORSCHAU|Vorschau:|Preview:",
+        "VON|Von:|From:"
+      })
+  void rest_neueKoepfe_inBeidenSprachen_deutschZuerst(
+      Zeile zeile, String deutsch, String englisch) {
+    // Issue #2208: allein stehend erkannt, mit Einzug und in anderer Schreibung.
+    assertThat(zeile.namen()).containsExactly(deutsch, englisch);
+    assertThat(zeile.rest(deutsch)).contains("");
+    assertThat(zeile.rest(englisch)).contains("");
+    assertThat(zeile.rest("  " + englisch.toUpperCase(Locale.ROOT))).contains("");
+  }
+
+  @Test
+  void rest_antwortIstKeinGespraech() {
+    assertThat(Zeile.ANTWORT.rest("## Gespräch")).isEmpty();
+    assertThat(Zeile.GESPRAECH.rest("## Answer")).isEmpty();
   }
 
   @Test

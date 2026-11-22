@@ -455,18 +455,7 @@ public class KanbanCompatService {
   public List<Comment> listComments(KanbanPrincipal principal, long cardId) {
     long boardId = requireBound(principal);
     ingest.requireReadableOnBoard(cardId, boardId);
-    return commentService.list(principal.userId(), cardId).stream()
-        .map(
-            c ->
-                new Comment(
-                    c.id(),
-                    c.authorName(),
-                    c.body(),
-                    c.createdAt(),
-                    c.origin(),
-                    c.tokenName(),
-                    c.agent()))
-        .toList();
+    return commentService.list(principal.userId(), cardId).stream().map(Comment::aus).toList();
   }
 
   /**
@@ -727,7 +716,47 @@ public class KanbanCompatService {
               description =
                   "Vom Werkzeug gemeldetes Modell (Header X-Agent-Model); null ohne Angabe.",
               example = "claude-opus-5-5")
-          @Nullable String agent) {}
+          @Nullable String agent,
+      @Schema(
+              description =
+                  "Art des Zugangs beim Anlegen: STANDARD (gewöhnlicher Projekt-Zugang) oder APP"
+                      + " (Zugang der Desktop-App); null bei der Oberfläche und älteren"
+                      + " Kommentaren.",
+              example = "STANDARD")
+          @Nullable String zugangArt,
+      @Schema(
+              description =
+                  "Ob der Kommentar ein Beitrag der KI ist: angelegt über einen STANDARD-Zugang,"
+                      + " dessen Inhaber dabei Owner oder Admin des Projekts war.",
+              example = "false")
+          boolean vonKi) {
+
+    /** Ein Kommentar ohne Zugangsart, nicht von der KI — die bisherige Parameterliste (#2208). */
+    public Comment(
+        Long id,
+        String author,
+        String body,
+        Instant createdAt,
+        @Nullable String origin,
+        @Nullable String tokenName,
+        @Nullable String agent) {
+      this(id, author, body, createdAt, origin, tokenName, agent, null, false);
+    }
+
+    /** Die Sicht der Kanban-Strecke auf einen Kommentar der Kommentar-Fassade (Issue #2208). */
+    static Comment aus(CommentService.CommentView c) {
+      return new Comment(
+          c.id(),
+          c.authorName(),
+          c.body(),
+          c.createdAt(),
+          c.origin(),
+          c.tokenName(),
+          c.agent(),
+          c.zugangArt(),
+          c.vonKi());
+    }
+  }
 
   /**
    * Ein Eintrag des Aktivitätsverlaufs eines Items (#876). Feldgleich mit der Antwort von {@code

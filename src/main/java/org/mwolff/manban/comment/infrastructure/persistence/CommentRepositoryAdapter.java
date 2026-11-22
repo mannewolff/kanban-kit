@@ -100,7 +100,9 @@ class CommentRepositoryAdapter implements CommentRepository {
         c.agent(),
         c.vonHandGeaendertAm(),
         c.vonHandKopfzeile(),
-        c.externKennung());
+        c.externKennung(),
+        c.zugangArt(),
+        c.vonKi());
   }
 
   private static Comment toDomain(CommentEntity e) {
@@ -118,6 +120,8 @@ class CommentRepositoryAdapter implements CommentRepository {
         e.getAgent(),
         e.getVonHandGeaendertAm(),
         e.getVonHandKopfzeile(),
-        e.getExternKennung());
+        e.getExternKennung(),
+        e.getZugangArt(),
+        e.isVonKi());
   }
 }

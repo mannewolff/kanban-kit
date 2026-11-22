@@ -1192,7 +1192,9 @@ class CommentServiceTest {
         c.agent(),
         c.vonHandGeaendertAm(),
         c.vonHandKopfzeile(),
-        c.externKennung());
+        c.externKennung(),
+        c.zugangArt(),
+        c.vonKi());
   }
 
   @Test

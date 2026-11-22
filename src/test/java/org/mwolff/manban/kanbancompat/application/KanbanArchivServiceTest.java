@@ -109,7 +109,9 @@ class KanbanArchivServiceTest {
                     zweiter,
                     "TOKEN",
                     "kit",
-                    "opus")));
+                    "opus",
+                    "STANDARD",
+                    true)));
 
     ItemDetail detail = service.itemByNumber(bound(), 42);
 
@@ -132,7 +134,16 @@ class KanbanArchivServiceTest {
     assertThat(detail.comments())
         .containsExactly(
             new Comment(5L, "Manne", "## Review", erster, "SESSION", null, null),
-            new Comment(6L, "Nachtlauf", "## Abschluss", zweiter, "TOKEN", "kit", "opus"));
+            new Comment(
+                6L,
+                "Nachtlauf",
+                "## Abschluss",
+                zweiter,
+                "TOKEN",
+                "kit",
+                "opus",
+                "STANDARD",
+                true));
   }
 
   @Test

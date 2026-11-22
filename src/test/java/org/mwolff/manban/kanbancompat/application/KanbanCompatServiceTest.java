@@ -1314,6 +1314,51 @@ class KanbanCompatServiceTest {
   }
 
   @Test
+  void listComments_reichtZugangsartUndKiDurch() {
+    // Given (Issue #2208, Plan #2206 E6): das Kit liest den Absender über /api/kanban/*
+    Instant at = Instant.parse("2026-01-01T10:00:00Z");
+    when(commentService.list(1L, 42L))
+        .thenReturn(
+            List.of(
+                new CommentService.CommentView(
+                    9L,
+                    42L,
+                    3L,
+                    "RZ",
+                    "## Gespräch",
+                    at,
+                    at,
+                    "TOKEN",
+                    "anbieter",
+                    null,
+                    "STANDARD",
+                    true),
+                new CommentService.CommentView(
+                    10L,
+                    42L,
+                    4L,
+                    "Kunde",
+                    "## Antwort",
+                    at,
+                    at,
+                    "TOKEN",
+                    "desktop",
+                    null,
+                    "APP",
+                    false),
+                new CommentService.CommentView(
+                    11L, 42L, 4L, "Kunde", "Hallo", at, at, "SESSION", null, null, null, false)));
+
+    // When
+    List<KanbanCompatService.Comment> result = service.listComments(bound(), 42L);
+
+    // Then
+    assertThat(result)
+        .extracting(KanbanCompatService.Comment::zugangArt, KanbanCompatService.Comment::vonKi)
+        .containsExactly(tuple("STANDARD", true), tuple("APP", false), tuple(null, false));
+  }
+
+  @Test
   void updateComment_delegatesToCommentService_whenCommentBelongsToCard() {
     // Given: der Kommentar 9 haengt an der Karte 42
     Instant at = Instant.parse("2026-01-01T10:00:00Z");

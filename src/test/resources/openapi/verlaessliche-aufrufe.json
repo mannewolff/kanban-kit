@@ -881,6 +881,12 @@
         },
         "tokenName" : {
           "type" : "string"
+        },
+        "vonKi" : {
+          "type" : "boolean"
+        },
+        "zugangArt" : {
+          "type" : "string"
         }
       },
       "type" : "object"

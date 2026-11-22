@@ -24,6 +24,8 @@ export const KIT_NAMEN: KitNamen = {
     { sache: 'REPARATUR', namen: ['kit:repair'], schutz: 'KEINER' },
     { sache: 'HOTFIX', namen: ['kit:hotfix'], schutz: 'KEINER' },
     { sache: 'MANUELL', namen: ['kit:manuell', 'kit:manual'], schutz: 'NUR_MENSCH' },
+    { sache: 'ANBIETER', namen: ['kit:provider'], schutz: 'KEINER' },
+    { sache: 'FREIGABE', namen: ['kit:approval'], schutz: 'KEINER' },
     { sache: 'LAUF_ABGEBROCHEN', namen: ['lauf:abgebrochen', 'run:aborted'], schutz: 'KEINER' },
     { sache: 'LAUF_LAEUFT', namen: ['lauf:laeuft', 'run:running'], schutz: 'KEINER' },
     { sache: 'LAUF_WARTET', namen: ['lauf:wartet', 'run:waiting'], schutz: 'KEINER' },

@@ -17,7 +17,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  * Web-Adapter des {@link ActorContext}-Ports (Issue #517): liest Herkunft und Token-Name aus dem
  * Spring-Sicherheitskontext und die Modell-Selbstauskunft aus dem Request-Header; bei
  * Token-Herkunft dazu die Laufkennung aus {@link Laufkennung#HEADER} (Issue #1426) und das Merkmal
- * des Zugangs der App aus dem {@link KanbanPrincipal} (Plan #2100, E3).
+ * des Zugangs der App aus dem {@link KanbanPrincipal} (Plan #2100, E3). Aus ihm folgt die Art des
+ * Zugangs ({@link ActorStamp#zugangArt()}, Issue #2208).
  *
  * <p>Die Authority-Strings entsprechen {@code SessionAuthenticationFilter.AUTHORITY} bzw. {@code
  * PatAuthenticationFilter.AUTHORITY}; als Literale gehalten, um keine Kanten auf fremde

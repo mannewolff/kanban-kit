@@ -2164,6 +2164,16 @@ export const en: Woerterbuch = {
         setzt: 'Only a human; the kit never sets it.',
         verschwindet: 'Only when a human removes it; afterwards the scheduler picks the card up again.',
       },
+      ANBIETER: {
+        bedeutung: 'The card is being worked on at the provider: the AI works on it in the data center.',
+        setzt: "The provider's data center when it takes over the card.",
+        verschwindet: 'As soon as the data center has finished working on the card.',
+      },
+      FREIGABE: {
+        bedeutung: 'An approval is pending on the card: an authorized person is to approve a state for release.',
+        setzt: "The provider's data center when it asks for the approval.",
+        verschwindet: 'As soon as the approval is given; the data center removes it.',
+      },
       LAUF_ABGEBROCHEN: {
         bedeutung:
           'A night runner’s run was aborted on this card; the comment “Run status” shows the state. Repeating is enough.',

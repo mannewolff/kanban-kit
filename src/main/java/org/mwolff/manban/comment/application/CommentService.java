@@ -31,6 +31,11 @@ import org.springframework.transaction.annotation.Transactional;
  * org.mwolff.manban.project.application.FremdesBoardException} ab, wenn das Board des Projekts in
  * einem fremden System liegt. Allein der Spiegel-Schreibweg ({@link #spiegeln}, {@link
  * #spiegelGeloescht}) schreibt dann noch.
+ *
+ * <p>Absender (Issue #2208, Plan #2206 E6, E7): Jeder angelegte Kommentar hält die Art des Zugangs
+ * fest und ob er ein Beitrag der KI ist. Einen Kommentar, dessen Kopf eine Antwort ist, weisen
+ * Anlegen und Ändern über einen gewöhnlichen Zugang ({@code STANDARD}) ab — das Rechenzentrum
+ * antwortet sich nicht selbst und gibt nichts frei.
  */
 @Service
 public class CommentService {
@@ -82,11 +87,17 @@ public class CommentService {
     long projectId = cardService.requireProjectId(cardId);
     permissions.require(userId, projectId, Permission.COMMENT_CREATE);
     boardQuelle.pruefeSchreibbar(projectId);
-    String authorName = users.findById(userId).map(UserSummary::displayName).orElse(UNBEKANNT);
-    Instant now = clock.instant();
     // Herkunft aus derselben Quelle wie der Verlauf (Issue #1620, A4); ohne Stempel bleibt sie
     // leer — unbekannt, nicht geraten (A6).
     ActorStamp stamp = actor.current();
+    pruefeKeineAntwortDesRechenzentrums(stamp, body);
+    String authorName = users.findById(userId).map(UserSummary::displayName).orElse(UNBEKANNT);
+    Instant now = clock.instant();
+    String zugangArt = stamp.zugangArt();
+    // Der Absender entscheidet, nicht eine Zeile im Text (Kriterium 11, E6).
+    boolean vonKi =
+        ActorStamp.ZUGANG_STANDARD.equals(zugangArt)
+            && permissions.istEchterOwnerOderAdmin(userId, projectId);
     Comment saved =
         comments.save(
             new Comment(
@@ -100,8 +111,23 @@ public class CommentService {
                 laufStart,
                 stamp.originName(),
                 stamp.tokenName(),
-                stamp.agent()));
+                stamp.agent(),
+                null,
+                null,
+                null,
+                zugangArt,
+                vonKi));
     return view(saved);
+  }
+
+  /**
+   * Weist einen Kommentar ab, dessen Kopf eine Antwort ist ({@link Comment#kopfIstAntwort}), wenn
+   * er über einen gewöhnlichen Zugang kommt (E7).
+   */
+  private static void pruefeKeineAntwortDesRechenzentrums(ActorStamp stamp, String body) {
+    if (ActorStamp.ZUGANG_STANDARD.equals(stamp.zugangArt()) && Comment.kopfIstAntwort(body)) {
+      throw new ProjectAccessDeniedException();
+    }
   }
 
   /**
@@ -249,9 +275,10 @@ public class CommentService {
     if (author == null || author != userId) {
       throw new ProjectAccessDeniedException();
     }
+    ActorStamp stamp = actor.current();
+    pruefeKeineAntwortDesRechenzentrums(stamp, body);
     return view(
-        comments.save(
-            comment.withBody(body, laufStart, actor.current().originName(), clock.instant())));
+        comments.save(comment.withBody(body, laufStart, stamp.originName(), clock.instant())));
   }
 
   @Transactional
@@ -361,7 +388,9 @@ public class CommentService {
         c.updatedAt(),
         c.origin(),
         c.tokenName(),
-        c.agent());
+        c.agent(),
+        c.zugangArt(),
+        c.vonKi());
   }
 
   /** Kommentardarstellung. */
@@ -394,7 +423,48 @@ public class CommentService {
               description =
                   "Modell-Selbstauskunft des Werkzeugs (Header X-Agent-Model); null ohne Angabe.",
               example = "claude-opus-5-5")
-          @Nullable String agent) {}
+          @Nullable String agent,
+      @Schema(
+              description =
+                  "Art des Zugangs beim Anlegen: STANDARD (gewöhnlicher Projekt-Zugang) oder APP"
+                      + " (Zugang der Desktop-App); null bei der Oberfläche und älteren"
+                      + " Kommentaren.",
+              example = "STANDARD")
+          @Nullable String zugangArt,
+      @Schema(
+              description =
+                  "Ob der Kommentar ein Beitrag der KI ist: angelegt über einen STANDARD-Zugang,"
+                      + " dessen Inhaber dabei Owner oder Admin des Projekts war.",
+              example = "false")
+          boolean vonKi) {
+
+    /** Ein Kommentar ohne Zugangsart, nicht von der KI — die bisherige Parameterliste (#2208). */
+    public CommentView(
+        Long id,
+        Long cardId,
+        @Nullable Long authorUserId,
+        String authorName,
+        String body,
+        Instant createdAt,
+        Instant updatedAt,
+        @Nullable String origin,
+        @Nullable String tokenName,
+        @Nullable String agent) {
+      this(
+          id,
+          cardId,
+          authorUserId,
+          authorName,
+          body,
+          createdAt,
+          updatedAt,
+          origin,
+          tokenName,
+          agent,
+          null,
+          false);
+    }
+  }
 
   /**
    * Eine Notiz an einer Karte im fremden System, wie der Spiegel sie übergibt (Issue #2162).

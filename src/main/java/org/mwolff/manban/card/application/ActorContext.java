@@ -38,6 +38,12 @@ public interface ActorContext {
       @Nullable Instant laufStart,
       boolean appZugang) {
 
+    /** Art eines gewöhnlichen Projekt-Zugangs, etwa des Rechenzentrums (Plan #2206, E6). */
+    public static final String ZUGANG_STANDARD = "STANDARD";
+
+    /** Art des Zugangs der Desktop-App eines Menschen (Plan #2206, E6). */
+    public static final String ZUGANG_APP = "APP";
+
     private static final ActorStamp UNKNOWN = new ActorStamp(null, null, null, null);
 
     /** Die bisherige Parameterliste, damit Aufrufer unverändert bleiben (Plan #2100, E3). */
@@ -60,6 +66,18 @@ public interface ActorContext {
      */
     public @Nullable String originName() {
       return origin == null ? null : origin.name();
+    }
+
+    /**
+     * Art des Zugangs bei Herkunft {@code TOKEN}: {@link #ZUGANG_APP} für den Zugang der App, sonst
+     * {@link #ZUGANG_STANDARD} — auch, wenn die Art des Tokens unbekannt ist; ohne Token {@code
+     * null} (Issue #2208, Plan #2206 E6).
+     */
+    public @Nullable String zugangArt() {
+      if (origin != CardActivityOrigin.TOKEN) {
+        return null;
+      }
+      return appZugang ? ZUGANG_APP : ZUGANG_STANDARD;
     }
   }
 }

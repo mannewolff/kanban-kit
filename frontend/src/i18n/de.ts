@@ -2302,6 +2302,16 @@ export const de = {
         setzt: 'Nur ein Mensch; das Kit setzt es nie.',
         verschwindet: 'Nur, wenn ein Mensch es abnimmt; danach nimmt der Taktgeber die Karte wieder auf.',
       },
+      ANBIETER: {
+        bedeutung: 'Die Karte steht beim Anbieter in Arbeit: Die KI arbeitet im Rechenzentrum an ihr.',
+        setzt: 'Das Rechenzentrum des Anbieters, wenn es die Karte übernimmt.',
+        verschwindet: 'Sobald das Rechenzentrum die Arbeit an der Karte beendet hat.',
+      },
+      FREIGABE: {
+        bedeutung: 'An der Karte wartet eine Freigabe: Ein berechtigter Mensch soll einen Stand zum Veröffentlichen freigeben.',
+        setzt: 'Das Rechenzentrum des Anbieters, wenn es um die Freigabe bittet.',
+        verschwindet: 'Sobald die Freigabe gegeben ist; das Rechenzentrum nimmt es ab.',
+      },
       LAUF_ABGEBROCHEN: {
         bedeutung:
           'Ein Lauf des Nacht-Runners ist an dieser Karte abgebrochen; der Kommentar „Laufstand“ nennt den Stand. Wiederholen genügt.',

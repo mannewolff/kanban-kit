@@ -1324,7 +1324,9 @@ mit dem festen Satz der Labels, die das claude-workflow-kit, die Laufsteuerung u
   `kit:on-hold` (ein Fachplan wartet auf ein äußeres Ereignis; nur ein Mensch hebt das Warten auf),
   `kit:repair` (Reparaturkarte der Kartenprüfung, gesetzt vom Runner), `kit:hotfix` (Karte eines
   Hotfix, der noch nicht nachgeholt ist), `kit:manual` (Karte vom Taktgeber des Kits ausgenommen;
-  setzt und nimmt nur ein Mensch ab)
+  setzt und nimmt nur ein Mensch ab), `kit:provider` (Karte steht beim Anbieter in Arbeit; setzt und
+  nimmt das Rechenzentrum ab), `kit:approval` (eine Freigabe des Kunden steht aus; setzt und nimmt das
+  Rechenzentrum ab)
 - **Lauf:** `run:aborted`, `run:running`, `run:waiting`
 - **Review:** `review:offen`, `review:done`
 - **Stufenleiste:** `goal:plan`, `goal:packages`, `goal:implementation`, `goal:push-prepared`,
