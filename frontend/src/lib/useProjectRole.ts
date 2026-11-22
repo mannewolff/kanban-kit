@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { projectsApi } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
-import { canEditCards, canModerateComments, isPlatformAdmin } from './roles'
+import { canEditCards, canModerateComments, darfStoerungenSehen, isPlatformAdmin } from './roles'
 
 /**
  * Löst die effektive Projektrolle auf und leitet daraus die Rechte ab — die einzige Quelle dafür
@@ -22,6 +22,7 @@ export function useProjectRole(projectId: number | null): {
   effectiveRole: string
   canEdit: boolean
   canModerate: boolean
+  darfStoerungenSehen: boolean
 } {
   const { user } = useAuth()
   const [fetched, setFetched] = useState<{ projectId: number; role: string } | null>(null)
@@ -53,5 +54,6 @@ export function useProjectRole(projectId: number | null): {
     effectiveRole,
     canEdit: canEditCards(effectiveRole, platformAdmin),
     canModerate: canModerateComments(effectiveRole, platformAdmin),
+    darfStoerungenSehen: darfStoerungenSehen(effectiveRole, platformAdmin),
   }
 }

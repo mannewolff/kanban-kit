@@ -337,10 +337,15 @@ export const en: Woerterbuch = {
 
   ROLLEN: {
     PROJEKT_ROLLEN: 'Project roles',
+    /** Anzeigenamen von Projektrollen; fehlt ein Schlüssel, zeigt die Oberfläche den Rollenwert roh. */
+    NAME: {
+      CUSTOMER: 'Customer',
+    },
     RESSOURCE: {
       BOARD: 'Board',
       EPIC: 'Epics',
       TICKET: 'Ticket',
+      REPAIR: 'Disruption',
       COMMENT: 'Comment',
       ATTACHMENT: 'Attachment',
       CARD: 'Card',

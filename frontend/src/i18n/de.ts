@@ -361,10 +361,15 @@ export const de = {
    */
   ROLLEN: {
     PROJEKT_ROLLEN: 'Projekt-Rollen',
+    /** Anzeigenamen von Projektrollen; fehlt ein Schlüssel, zeigt die Oberfläche den Rollenwert roh. */
+    NAME: {
+      CUSTOMER: 'Kunde',
+    },
     RESSOURCE: {
       BOARD: 'Board',
       EPIC: 'Vorhaben',
       TICKET: 'Ticket',
+      REPAIR: 'Störung',
       COMMENT: 'Kommentar',
       ATTACHMENT: 'Anhang',
       CARD: 'Karte',

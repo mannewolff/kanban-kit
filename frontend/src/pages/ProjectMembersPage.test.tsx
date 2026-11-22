@@ -91,8 +91,8 @@ describe('ProjectMembersPage', () => {
     renderPage(makeApi(), 'ADMIN')
     expect(await screen.findByText('Mika Member')).toBeInTheDocument()
 
-    expect(await angeboteneRollen('Rolle von Mika Member')).toEqual(['ADMIN', 'MEMBER', 'VIEWER'])
-    expect(await angeboteneRollen('Einladungsrolle')).toEqual(['ADMIN', 'MEMBER', 'VIEWER'])
+    expect(await angeboteneRollen('Rolle von Mika Member')).toEqual(['ADMIN', 'MEMBER', 'Kunde', 'VIEWER'])
+    expect(await angeboteneRollen('Einladungsrolle')).toEqual(['ADMIN', 'MEMBER', 'Kunde', 'VIEWER'])
     // Die Rolle eines OWNERs kann der ADMIN nicht ändern — sie steht als Text da, ohne Auswahl.
     expect(screen.queryByLabelText('Rolle von Olga Owner')).not.toBeInTheDocument()
     expect(screen.getByText('OWNER')).toBeInTheDocument()
@@ -102,8 +102,8 @@ describe('ProjectMembersPage', () => {
     renderPage(makeApi(), 'OWNER')
     expect(await screen.findByText('Mika Member')).toBeInTheDocument()
 
-    expect(await angeboteneRollen('Rolle von Mika Member')).toEqual(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'])
-    expect(await angeboteneRollen('Einladungsrolle')).toEqual(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'])
+    expect(await angeboteneRollen('Rolle von Mika Member')).toEqual(['OWNER', 'ADMIN', 'MEMBER', 'Kunde', 'VIEWER'])
+    expect(await angeboteneRollen('Einladungsrolle')).toEqual(['OWNER', 'ADMIN', 'MEMBER', 'Kunde', 'VIEWER'])
   })
 
   it('bietet dem Plattform-Admin die Rolle OWNER auch mit Projekt-Rolle ADMIN an', async () => {
@@ -111,7 +111,7 @@ describe('ProjectMembersPage', () => {
     renderPage(makeApi(), 'ADMIN')
     expect(await screen.findByText('Mika Member')).toBeInTheDocument()
 
-    expect(await angeboteneRollen('Rolle von Mika Member')).toEqual(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'])
+    expect(await angeboteneRollen('Rolle von Mika Member')).toEqual(['OWNER', 'ADMIN', 'MEMBER', 'Kunde', 'VIEWER'])
     expect(screen.getByLabelText('Rolle von Olga Owner')).toBeInTheDocument()
   })
 
@@ -194,6 +194,19 @@ describe('ProjectMembersPage', () => {
     renderPage(makeApi(), 'VIEWER')
     expect(await screen.findByText('Mika Member')).toBeInTheDocument()
     expect(screen.queryByLabelText('Namen von Mika Member bearbeiten')).not.toBeInTheDocument()
+  })
+
+  it('lädt mit der Rolle Kunde ein (Issue #2213)', async () => {
+    const api = makeApi()
+    renderPage(api, 'OWNER')
+    expect(await screen.findByText('Olga Owner')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/E-Mail einladen/), { target: { value: 'kunde@x.de' } })
+    fireEvent.mouseDown(screen.getByLabelText('Einladungsrolle'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Kunde' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Einladen' }))
+
+    await waitFor(() => expect(api.invite).toHaveBeenCalledWith(5, 'kunde@x.de', 'CUSTOMER'))
   })
 
   it('verschickt eine Einladung', async () => {

@@ -24,7 +24,15 @@ describe('useProjectRole', () => {
     expect(result.current.effectiveRole).toBe('MEMBER')
     expect(result.current.canEdit).toBe(true)
     expect(result.current.canModerate).toBe(false)
+    expect(result.current.darfStoerungenSehen).toBe(true)
     expect(mList).not.toHaveBeenCalled()
+  })
+
+  it('verbirgt einem Kunden die Störungen (Issue #2213)', () => {
+    authUser.value = { platformRole: 'USER', memberships: [{ projectId: 5, role: 'CUSTOMER' }] }
+    const { result } = renderHook(() => useProjectRole(5))
+    expect(result.current.canEdit).toBe(true)
+    expect(result.current.darfStoerungenSehen).toBe(false)
   })
 
   it('lädt die Rolle nach, wenn keine Mitgliedschaft bekannt ist', async () => {
@@ -94,5 +102,6 @@ describe('useProjectRole', () => {
     const { result } = renderHook(() => useProjectRole(null))
     expect(result.current.canEdit).toBe(true)
     expect(result.current.canModerate).toBe(true)
+    expect(result.current.darfStoerungenSehen).toBe(true)
   })
 })
