@@ -2305,6 +2305,23 @@ export const en: Woerterbuch = {
     IN_ARBEIT_SEIT: (zeit) => `in progress with the provider since ${zeit}`,
   },
 
+  IDEE_EINSTELLEN: {
+    KNOPF: 'Submit an idea',
+    TITEL: 'Submit an idea',
+    TEXT: 'Your idea',
+    HINWEIS: 'The idea becomes a card in the idea column of the board.',
+    ZU_LANG: (laenge, grenze) => `${laenge} of at most ${grenze} characters`,
+    BOARD: 'Board',
+    DATEIEN: 'Attach files',
+    DATEI_ENTFERNEN_ARIA: (name) => `Remove ${name}`,
+    EINSTELLEN: 'Submit',
+    OHNE_SPALTE: 'The board has no column the idea could go into.',
+    ANLEGEN_FEHLER: 'The idea could not be created.',
+    DATEIEN_FEHLER: (namen) =>
+      `The idea has been created, but these files could not be attached: ${namen}. Attach them to the card again.`,
+    EINGESTELLT: 'Idea submitted.',
+  },
+
   API_UEBERSICHT: {
     TITEL: 'API',
     ZURUECK: 'Back to Administration',

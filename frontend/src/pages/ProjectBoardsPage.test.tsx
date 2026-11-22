@@ -80,10 +80,10 @@ const mockedBoards = boardsApi as unknown as {
   purge: ReturnType<typeof vi.fn>
 }
 
-function renderAt(role: string, boards: Array<{ id: number; name: string }>) {
+function renderAt(role: string, boards: Array<{ id: number; name: string; columns?: Board['columns'] }>) {
   mockedProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role, createdAt: '' }])
   mockedBoards.list.mockResolvedValue(
-    boards.map((b) => ({ ...b, projectId: 5, createdAt: '', columns: [] })),
+    boards.map((b) => ({ projectId: 5, createdAt: '', columns: [], ...b })),
   )
   mockedBoards.listArchived.mockResolvedValue([])
   return render(
@@ -683,7 +683,8 @@ describe('ProjectBoardsPage — Ansicht als XY (Issue #1927)', () => {
     expect(screen.queryByLabelText('Board Aktiv archivieren')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Board Altes Board endgültig löschen')).not.toBeInTheDocument()
     const knoepfe = screen.getAllByRole('button', { name: 'Vorschau' })
-    expect(knoepfe.map((k) => k.textContent)).toEqual(['Anlegen', '', '', 'Wiederherstellen', ''])
+    // „Idee einstellen“ (Issue #2220) steht in der Kopfzeile und ist in der Vorschau ebenso gesperrt.
+    expect(knoepfe.map((k) => k.textContent)).toEqual(['Idee einstellen', 'Anlegen', '', '', 'Wiederherstellen', ''])
     knoepfe.forEach((k) => {
       expect(k).toBeDisabled()
       fireEvent.click(k)
@@ -781,5 +782,61 @@ describe('Startseite des Projekts für den Kunden (Issue #2218)', () => {
       await Promise.resolve()
     })
     expect(screen.queryByText('Board-Ansicht')).not.toBeInTheDocument()
+  })
+})
+
+/** Knopf „Idee einstellen“ für alle, die Karten anlegen dürfen (Issue #2220, Plan #2206 E13). */
+describe('ProjectBoardsPage — Idee einstellen', () => {
+  const zwei = [
+    { id: 9, name: 'Board A', columns: [{ id: 91, name: 'Backlog', position: 0, wipLimit: null }] },
+    { id: 10, name: 'Board B', columns: [] },
+  ]
+
+  it.each(['CUSTOMER', 'MEMBER'])('zeigt den Knopf für %s und öffnet den Dialog', async (rolle) => {
+    renderAt(rolle, zwei)
+    fireEvent.click(await screen.findByRole('button', { name: 'Idee einstellen' }))
+    expect(await screen.findByRole('dialog', { name: 'Idee einstellen' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Deine Idee')).toBeInTheDocument()
+  })
+
+  it('zeigt den Knopf nicht für Betrachter', async () => {
+    renderAt('VIEWER', zwei)
+    expect(await screen.findByText('Board A')).toBeInTheDocument()
+    await waitFor(() => expect(mockedProjects.list).toHaveBeenCalled())
+    await screen.findByText('Team')
+    expect(screen.queryByRole('button', { name: 'Idee einstellen' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt den Knopf nicht ohne Board', async () => {
+    renderPage('MEMBER')
+    expect(await screen.findByText('Team')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Idee einstellen' })).not.toBeInTheDocument()
+  })
+
+  it('schließt den Dialog mit Abbrechen', async () => {
+    renderAt('MEMBER', zwei)
+    fireEvent.click(await screen.findByRole('button', { name: 'Idee einstellen' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Abbrechen' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+})
+
+vi.mock('../api/cards', () => ({ cardsApi: { create: vi.fn() } }))
+
+describe('ProjectBoardsPage — Idee eingestellt', () => {
+  it('meldet die eingestellte Idee und schließt den Dialog', async () => {
+    const { cardsApi } = await import('../api/cards')
+    ;(cardsApi.create as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 77 })
+    renderAt('CUSTOMER', [
+      { id: 9, name: 'Board A', columns: [{ id: 91, name: 'Backlog', position: 0, wipLimit: null }] },
+      { id: 10, name: 'Board B', columns: [] },
+    ])
+    fireEvent.click(await screen.findByRole('button', { name: 'Idee einstellen' }))
+    fireEvent.change(await screen.findByLabelText('Deine Idee'), { target: { value: 'Export als CSV' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Einstellen' }))
+
+    expect(await screen.findByText('Idee eingestellt.')).toBeInTheDocument()
+    expect(cardsApi.create).toHaveBeenCalledWith(9, 91, '[Idea] Export als CSV')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 })

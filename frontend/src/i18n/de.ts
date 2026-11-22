@@ -2446,6 +2446,24 @@ export const de = {
     IN_ARBEIT_SEIT: (zeit: string) => `beim Anbieter in Arbeit seit ${zeit}`,
   },
 
+  /** Dialog „Idee einstellen“ auf der Startseite des Projekts: Text und Dateien in einem Schritt (Issue #2220, Plan #2206 E13). */
+  IDEE_EINSTELLEN: {
+    KNOPF: 'Idee einstellen',
+    TITEL: 'Idee einstellen',
+    TEXT: 'Deine Idee',
+    HINWEIS: 'Die Idee landet als Karte in der Ideenspalte des Boards.',
+    ZU_LANG: (laenge: number, grenze: number) => `${laenge} von höchstens ${grenze} Zeichen`,
+    BOARD: 'Board',
+    DATEIEN: 'Dateien anhängen',
+    DATEI_ENTFERNEN_ARIA: (name: string) => `${name} entfernen`,
+    EINSTELLEN: 'Einstellen',
+    OHNE_SPALTE: 'Das Board hat keine Spalte, in die die Idee fallen kann.',
+    ANLEGEN_FEHLER: 'Die Idee ließ sich nicht anlegen.',
+    DATEIEN_FEHLER: (namen: string) =>
+      `Die Idee ist angelegt, aber diese Dateien ließen sich nicht anhängen: ${namen}. Hänge sie an der Karte erneut an.`,
+    EINGESTELLT: 'Idee eingestellt.',
+  },
+
   /** Seitenrahmen der API-Übersicht und Ausprobieren (Issue #1660, E2); Swagger UI und das OpenAPI-Dokument bleiben, wie sie sind. */
   API_UEBERSICHT: {
     TITEL: 'API-Schnittstelle',

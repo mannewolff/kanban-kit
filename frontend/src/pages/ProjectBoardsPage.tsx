@@ -20,12 +20,13 @@ import { boardsApi, type Board } from '../api/boards'
 import { apiErrorMessage } from '../api/client'
 import { projectsApi } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
+import { IdeeEinstellenDialog } from '../components/anbieter/IdeeEinstellenDialog'
 import { WartetAufDich } from '../components/anbieter/WartetAufDich'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { VorschauGesperrt } from '../components/VorschauGesperrt'
 import { useT } from '../i18n/SpracheContext'
-import { canManageBoards, canManageMembers } from '../lib/roles'
+import { canEditCards, canManageBoards, canManageMembers } from '../lib/roles'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { SURFACE_HOVER_SHADOW, TABELLENZIFFERN } from '../theme'
 
@@ -46,6 +47,7 @@ export function ProjectBoardsPage() {
   const [confirmBoard, setConfirmBoard] = useState<Board | null>(null)
   const [purgeBoard, setPurgeBoard] = useState<Board | null>(null)
   const [purgeInput, setPurgeInput] = useState('')
+  const [ideeOffen, setIdeeOffen] = useState(false)
 
   const canManage = canManageBoards(role)
 
@@ -181,9 +183,19 @@ export function ProjectBoardsPage() {
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Breadcrumbs items={[{ label: t.RAHMEN.NAV_PROJEKTE, to: '/projects' }, { label: projectName || t.RAHMEN.NAV_PROJEKT }]} />
-        {canManageMembers(role) && (
-          <Link component={RouterLink} to={`/projects/${id}/members`}>{t.RAHMEN.NAV_MITGLIEDER}</Link>
-        )}
+        <Stack direction="row" spacing={2} alignItems="center">
+          {/* Eine Idee mit Anhängen einstellen (Issue #2220, Plan #2206 E13): wer Karten anlegen darf. */}
+          {canEditCards(role) && boards.length > 0 && (
+            <VorschauGesperrt>
+              <Button variant="contained" size="small" onClick={() => setIdeeOffen(true)}>
+                {t.IDEE_EINSTELLEN.KNOPF}
+              </Button>
+            </VorschauGesperrt>
+          )}
+          {canManageMembers(role) && (
+            <Link component={RouterLink} to={`/projects/${id}/members`}>{t.RAHMEN.NAV_MITGLIEDER}</Link>
+          )}
+        </Stack>
       </Stack>
 
       <WartetAufDich projectId={id} />
@@ -292,6 +304,14 @@ export function ProjectBoardsPage() {
             ))}
           </Stack>
         </Box>
+      )}
+
+      {ideeOffen && (
+        <IdeeEinstellenDialog
+          boards={boards}
+          onClose={() => setIdeeOffen(false)}
+          onEingestellt={() => notify(t.IDEE_EINSTELLEN.EINGESTELLT, 'success')}
+        />
       )}
 
       <Dialog open={confirmBoard !== null} onClose={() => setConfirmBoard(null)}>

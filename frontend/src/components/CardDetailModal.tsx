@@ -73,6 +73,7 @@ import type { Member } from '../api/members'
 import { AbnahmeSzenarienDialog } from './AbnahmeSzenarienDialog'
 import { Breadcrumbs } from './Breadcrumbs'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
+import { useAnhangHochladen } from '../lib/useAnhangHochladen'
 import { szenarienAus } from '../lib/abnahmeSzenarien'
 import { CardFields } from './CardFields'
 import { vorhabenFeld } from '../lib/cardEpic'
@@ -1609,7 +1610,7 @@ function CardDetailModalView({
   const [editingBody, setEditingBody] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [previews, setPreviews] = useState<Record<number, string>>({})
-  const [uploadError, setUploadError] = useState<string | null>(null)
+  const { fehler: uploadError, setFehler: setUploadError, hochladen } = useAnhangHochladen(attachmentsApi)
   const [preview, setPreview] = useState<{ attachment: Attachment; url: string } | null>(null)
   const [baum, setBaum] = useState<DerivationNode[] | null>(null)
   const [baumFehler, setBaumFehler] = useState<string | null>(null)
@@ -1945,26 +1946,14 @@ function CardDetailModalView({
     }
   }
 
+  // Hochladen samt Vorschau über `useAnhangHochladen` (Issue #2220): Scheitert nur die Vorschau,
+  // steht der Anhang trotzdem in der Liste.
   const uploadFile = async (file: File) => {
-    setUploadError(null)
-    let created: Attachment
-    try {
-      created = await attachmentsApi.upload(card.id, file)
-    } catch (error_: unknown) {
-      setUploadError(apiErrorMessage(error_, t.KARTE.UPLOAD_FEHLER))
-      return
-    }
-    setAttachments((a) => [...a, created])
-    // Vorschau separat: Scheitert nur ihr Abruf, ist der Anhang trotzdem angekommen — ein erneuter
-    // Upload-Versuch waere hier ein zusaetzlicher, unnoetiger Anhang.
-    if (created.contentType.startsWith('image/')) {
-      try {
-        const blob = await attachmentsApi.fetchBlob(created.id)
-        setPreviews((p) => ({ ...p, [created.id]: URL.createObjectURL(blob) }))
-      } catch (error_: unknown) {
-        setUploadError(apiErrorMessage(error_, t.KARTE.VORSCHAU_NACH_UPLOAD_FEHLER))
-      }
-    }
+    const ergebnis = await hochladen(card.id, file)
+    if (ergebnis == null) return
+    const { anhang, vorschauUrl } = ergebnis
+    setAttachments((a) => [...a, anhang])
+    if (vorschauUrl != null) setPreviews((p) => ({ ...p, [anhang.id]: vorschauUrl }))
   }
 
   const deleteAttachment = async (id: number) => {

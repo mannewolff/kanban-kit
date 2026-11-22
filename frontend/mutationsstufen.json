@@ -233,7 +233,8 @@
         "src/pages/BoardPage.tsx",
         "src/pages/EpicsPage.tsx",
         "src/pages/KartenLinkPage.tsx",
-        "src/components/anbieter/WartetAufDich.tsx"
+        "src/components/anbieter/WartetAufDich.tsx",
+        "src/components/anbieter/IdeeEinstellenDialog.tsx"
       ],
       "testMuster": [
         "src/pages/ProjectsPage.test.tsx",
@@ -243,7 +244,8 @@
         "src/pages/BoardPage.test.tsx",
         "src/pages/EpicsPage.test.tsx",
         "src/pages/KartenLinkPage.test.tsx",
-        "src/components/anbieter/WartetAufDich.test.tsx"
+        "src/components/anbieter/WartetAufDich.test.tsx",
+        "src/components/anbieter/IdeeEinstellenDialog.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 3,
