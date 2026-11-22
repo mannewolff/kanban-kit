@@ -1,6 +1,7 @@
 package org.mwolff.manban.entscheidungskette.application;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +10,7 @@ import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.auth.application.UserSummary;
+import org.mwolff.manban.card.application.Anbietersicht;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.KartenKetteLeser;
@@ -58,8 +60,10 @@ import org.springframework.transaction.annotation.Transactional;
  * Prüfung vor Ready und ob das Board in einem fremden System liegt (Issue #2165, Plan #2152 A11),
  * rechnet mit {@link KettenRechner} und löst die Namen der Menschen auf.
  *
- * <p>Eine neue Rolle gibt es nicht: Wer die Karte sehen darf, sieht ihre Kette. Ohne
- * Zwischenspeicher und ohne Uhr — zweimal aufgerufen, ergibt derselbe Stand dieselbe Antwort.
+ * <p>Eine neue Rolle gibt es nicht: Wer die Karte sehen darf, sieht ihre Kette. Ohne das Recht auf
+ * Störungen (Issue #2214, Plan #2206 E2) endet eine verborgene Karte wie eine unbekannte, und die
+ * Kette lässt verborgene Karten samt Verlauf, ihre Kommentare und nicht grüne Kartenprüfungen aus.
+ * Ohne Zwischenspeicher und ohne Uhr — zweimal aufgerufen, ergibt derselbe Stand dieselbe Antwort.
  */
 // PMD.CouplingBetweenObjects, PMD.ExcessiveImports: Der Dienst ist die eine Stelle, die die
 // Fassaden von card, comment,
@@ -76,6 +80,7 @@ public class EntscheidungsketteService {
   private final KitReviewVorReadyReader reviewVorReady;
   private final UserLookup users;
   private final BoardQuelle boardQuelle;
+  private final Anbietersicht anbieter;
 
   public EntscheidungsketteService(
       CardService cards,
@@ -84,7 +89,8 @@ public class EntscheidungsketteService {
       CommentService comments,
       KitReviewVorReadyReader reviewVorReady,
       UserLookup users,
-      BoardQuelle boardQuelle) {
+      BoardQuelle boardQuelle,
+      Anbietersicht anbieter) {
     this.cards = cards;
     this.permissions = permissions;
     this.leser = leser;
@@ -92,6 +98,7 @@ public class EntscheidungsketteService {
     this.reviewVorReady = reviewVorReady;
     this.users = users;
     this.boardQuelle = boardQuelle;
+    this.anbieter = anbieter;
   }
 
   /**
@@ -99,9 +106,9 @@ public class EntscheidungsketteService {
    *
    * @return {@link EntscheidungsketteView#UNSICHTBAR} in einem Projekt ohne Kit, an einer Idee und
    *     an einem Vorhaben
-   * @throws CardNotFoundException wenn es die Karte nicht gibt, sie im Papierkorb liegt oder der
-   *     Aufrufer kein Mitglied ihres Projekts ist — alles gleich, damit ein Fremder nichts über die
-   *     Existenz erfährt
+   * @throws CardNotFoundException wenn es die Karte nicht gibt, sie im Papierkorb liegt, der
+   *     Aufrufer kein Mitglied ihres Projekts ist oder sie ihm verborgen ist — alles gleich, damit
+   *     ein Fremder nichts über die Existenz erfährt
    */
   @Transactional(readOnly = true)
   public EntscheidungsketteView kette(long userId, long cardId) {
@@ -111,7 +118,9 @@ public class EntscheidungsketteService {
     } catch (ProjectNotFoundException e) {
       throw new CardNotFoundException(e);
     }
-    KartenKette kette = leser.lade(cardId);
+    anbieter.requireSichtbar(userId, cardId);
+    KartenKette kette =
+        ohneVerborgene(leser.lade(cardId), anbieter.verborgeneNummern(userId, projekt));
     Art art = Art.valueOf(kette.karte().art());
     if (art == Art.IDEE || art == Art.VORHABEN || !arbeitetMitKit(projekt)) {
       return EntscheidungsketteView.UNSICHTBAR;
@@ -123,7 +132,7 @@ public class EntscheidungsketteService {
             kette.nachfahren().stream().map(EntscheidungsketteService::bezug).toList(),
             kette.ideen().stream().map(EntscheidungsketteService::karte).toList(),
             kette.aktivitaeten().stream().map(EntscheidungsketteService::aktivitaet).toList(),
-            comments.kettenKommentare(kartenIds(kette)).stream()
+            comments.kettenKommentare(userId, projekt, kartenIds(kette)).stream()
                 .map(EntscheidungsketteService::kommentar)
                 .toList(),
             kette.labelEreignisse().stream().map(EntscheidungsketteService::labelEreignis).toList(),
@@ -139,6 +148,54 @@ public class EntscheidungsketteService {
   private boolean arbeitetMitKit(long projekt) {
     return leser.traegtKitKarte(projekt)
         || comments.projektTraegtKitKommentar(projekt, KitMeldungen.festeAnfaenge());
+  }
+
+  /**
+   * Die Kette ohne die verborgenen Karten (Issue #2214): Glieder und Ideen mit einer verborgenen
+   * Nummer entfallen, mit ihnen Verlauf und Label-Ereignisse dieser Karten.
+   */
+  static KartenKette ohneVerborgene(KartenKette kette, Set<Integer> verborgen) {
+    if (verborgen.isEmpty()) {
+      return kette;
+    }
+    Set<Long> entfallen = new HashSet<>();
+    List<KettenGlied> vorfahren = ohneVerborgene(kette.vorfahren(), verborgen, entfallen);
+    List<KettenGlied> nachfahren = ohneVerborgene(kette.nachfahren(), verborgen, entfallen);
+    List<KettenKarte> ideen =
+        kette.ideen().stream().filter(i -> bleibt(i, verborgen, entfallen)).toList();
+    return new KartenKette(
+        kette.karte(),
+        vorfahren,
+        nachfahren,
+        ideen,
+        kette.aktivitaeten().stream().filter(a -> !entfallen.contains(a.kartenId())).toList(),
+        kette.labelEreignisse().stream().filter(e -> !entfallen.contains(e.kartenId())).toList());
+  }
+
+  private static List<KettenGlied> ohneVerborgene(
+      List<KettenGlied> glieder, Set<Integer> verborgen, Set<Long> entfallen) {
+    return glieder.stream()
+        .filter(
+            g -> {
+              Integer nummer = g.nummer();
+              if (nummer == null || !verborgen.contains(nummer)) {
+                return true;
+              }
+              KettenKarte k = g.karte();
+              if (k != null) {
+                entfallen.add(k.id());
+              }
+              return false;
+            })
+        .toList();
+  }
+
+  private static boolean bleibt(KettenKarte karte, Set<Integer> verborgen, Set<Long> entfallen) {
+    if (verborgen.contains(karte.nummer())) {
+      entfallen.add(karte.id());
+      return false;
+    }
+    return true;
   }
 
   /** Die Karten der Kette im Bestand: die geöffnete, Vorfahren, Nachfahren und Ideen. */

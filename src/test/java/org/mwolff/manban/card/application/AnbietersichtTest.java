@@ -129,6 +129,14 @@ class AnbietersichtTest {
   }
 
   @Test
+  void verborgeneKartenIds_nennenDieReparaturkartenNurOhneRecht() {
+    assertThat(sicht.verborgeneKartenIds(KUNDE, PROJEKT)).containsExactly(REP_ID);
+    assertThat(sicht.verborgeneKartenIds(OWNER, PROJEKT)).isEmpty();
+    assertThat(sicht.verborgeneKartenIds(ADMIN, PROJEKT)).isEmpty();
+    verify(cards, never()).findByIds(anyCollection());
+  }
+
+  @Test
   void derPlattformAdmin_siehtAlles() {
     assertThat(sicht.istVerborgen(ADMIN, PROJEKT, karte(1L, REPARATUR_NR))).isFalse();
     assertThat(sicht.siehtStoerungen(ADMIN, PROJEKT)).isTrue();

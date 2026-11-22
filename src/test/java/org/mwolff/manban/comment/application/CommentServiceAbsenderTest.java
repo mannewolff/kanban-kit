@@ -22,6 +22,7 @@ import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.card.application.ActorContext;
 import org.mwolff.manban.card.application.ActorContext.ActorStamp;
+import org.mwolff.manban.card.application.Anbietersicht;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.FremdKartenSchreiber.FremderAkteur;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
@@ -64,7 +65,8 @@ class CommentServiceAbsenderTest {
             users,
             actor,
             Clock.fixed(FIXED, ZoneOffset.UTC),
-            boardQuelle);
+            boardQuelle,
+            mock(Anbietersicht.class));
     when(cardService.requireProjectId(5L)).thenReturn(1L);
   }
 

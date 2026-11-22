@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.card.application.ActorContext;
 import org.mwolff.manban.card.application.ActorContext.ActorStamp;
+import org.mwolff.manban.card.application.Anbietersicht;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.FremdKartenSchreiber.FremderAkteur;
@@ -44,7 +46,9 @@ import org.mwolff.manban.project.domain.Permission;
 /** Verhaltenstests der Kommentar-Use-Cases (Mockito an den Ports). */
 // PMD.TooManyMethods: je Use-Case und Regel ein kleiner @Test; mit der Herkunft (Issue #1620)
 // kamen die Stempel-Fälle dazu, die das Paket ausdrücklich hier verlangt.
-@SuppressWarnings("PMD.TooManyMethods")
+// PMD.ExcessiveImports, PMD.CyclomaticComplexity: Die Summe über alle Fälle; mit der Sicht des
+// Anbieters (Issue #2214) überschreitet sie die Schwelle, die einzelne Methode bleibt bei 2.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.ExcessiveImports", "PMD.CyclomaticComplexity"})
 class CommentServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -56,6 +60,7 @@ class CommentServiceTest {
   private UserLookup users;
   private ActorContext actor;
   private BoardQuelle boardQuelle;
+  private Anbietersicht anbieter;
   private CommentService service;
 
   private static Comment comment(Long authorUserId) {
@@ -72,8 +77,10 @@ class CommentServiceTest {
     when(actor.current()).thenReturn(ActorStamp.unknown());
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     boardQuelle = mock(BoardQuelle.class);
+    anbieter = mock(Anbietersicht.class);
     service =
-        new CommentService(comments, cardService, permissions, users, actor, clock, boardQuelle);
+        new CommentService(
+            comments, cardService, permissions, users, actor, clock, boardQuelle, anbieter);
     when(cardService.requireProjectId(5L)).thenReturn(1L);
   }
 
@@ -201,6 +208,138 @@ class CommentServiceTest {
     service.list(1L, 5L);
 
     verify(permissions).requireMembership(1L, 42L);
+  }
+
+  private static final String ROTE_PRUEFUNG = "## Kartenprüfung\n\nErgebnis: rot";
+  private static final String GRUENE_PRUEFUNG = "## Card check\n\nResult: green";
+
+  private static Comment mitText(long id, long cardId, String body) {
+    return new Comment(id, cardId, 1L, "Kit", body, FIXED, FIXED, null, null, null, null);
+  }
+
+  @Test
+  void list_ohneRechtAufStoerungen_laesstNichtGrueneKartenpruefungenAus() {
+    // Given (Issue #2214, Plan #2206 E2)
+    when(comments.findByCardId(5L))
+        .thenReturn(
+            List.of(
+                mitText(1L, 5L, ROTE_PRUEFUNG),
+                mitText(2L, 5L, GRUENE_PRUEFUNG),
+                mitText(3L, 5L, "Hallo")));
+
+    // When / Then
+    assertThat(service.list(7L, 5L))
+        .extracting(CommentService.CommentView::id)
+        .containsExactly(2L, 3L);
+    verify(anbieter).requireSichtbar(7L, 5L);
+  }
+
+  @Test
+  void list_mitRechtAufStoerungen_zeigtAlleKartenpruefungen() {
+    // Given
+    when(anbieter.siehtStoerungen(8L, 1L)).thenReturn(true);
+    when(comments.findByCardId(5L))
+        .thenReturn(List.of(mitText(1L, 5L, ROTE_PRUEFUNG), mitText(2L, 5L, GRUENE_PRUEFUNG)));
+
+    // When / Then
+    assertThat(service.list(8L, 5L))
+        .extracting(CommentService.CommentView::id)
+        .containsExactly(1L, 2L);
+  }
+
+  @Test
+  void list_anEinerVerborgenenKarte_endetWieBeiEinerUnbekannten() {
+    // Given
+    doThrow(new CardNotFoundException()).when(anbieter).requireSichtbar(7L, 5L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.list(7L, 5L)).isInstanceOf(CardNotFoundException.class);
+    verify(comments, never()).findByCardId(5L);
+  }
+
+  @Test
+  void create_anEinerVerborgenenKarte_endetWieBeiEinerUnbekannten() {
+    // Given
+    doThrow(new CardNotFoundException()).when(anbieter).requireSichtbar(7L, 5L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.create(7L, 5L, "Hallo"))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(comments, never()).save(any(Comment.class));
+  }
+
+  @Test
+  void update_anEinerVerborgenenKarte_endetWieBeiEinerUnbekannten() {
+    // Given
+    when(comments.findById(3L)).thenReturn(Optional.of(comment(7L)));
+    doThrow(new CardNotFoundException()).when(anbieter).requireSichtbar(7L, 5L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.update(7L, 3L, "Neu"))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(comments, never()).save(any(Comment.class));
+  }
+
+  @Test
+  void trefferAufBoard_ohneRecht_laesstVerborgeneKartenUndRotePruefungenAus() {
+    // Given
+    when(anbieter.verborgeneKartenIds(7L, 1L)).thenReturn(Set.of(6L));
+    when(comments.findFirstMatchPerCardOnBoard(1L, 10L, "rot"))
+        .thenReturn(
+            List.of(
+                mitText(3L, 5L, "rot gefärbt"),
+                mitText(4L, 6L, "rot an der Reparatur"),
+                mitText(5L, 8L, ROTE_PRUEFUNG)));
+
+    // When / Then
+    assertThat(service.trefferAufBoard(7L, 1L, 10L, "rot"))
+        .extracting(CommentService.KommentarTrefferView::commentId)
+        .containsExactly(3L);
+  }
+
+  @Test
+  void trefferAufBoard_mitRecht_liefertAlles() {
+    // Given
+    when(anbieter.siehtStoerungen(8L, 1L)).thenReturn(true);
+    when(comments.findFirstMatchPerCardOnBoard(1L, 10L, "rot"))
+        .thenReturn(
+            List.of(mitText(4L, 6L, "rot an der Reparatur"), mitText(5L, 8L, ROTE_PRUEFUNG)));
+
+    // When / Then
+    assertThat(service.trefferAufBoard(8L, 1L, 10L, "rot"))
+        .extracting(CommentService.KommentarTrefferView::commentId)
+        .containsExactly(4L, 5L);
+  }
+
+  @Test
+  void kettenKommentare_ohneRecht_laesstVerborgeneKartenUndRotePruefungenAus() {
+    // Given
+    when(anbieter.verborgeneKartenIds(7L, 1L)).thenReturn(Set.of(6L));
+    when(comments.findKettenKommentare(List.of(5L, 6L)))
+        .thenReturn(
+            List.of(
+                mitText(3L, 5L, ROTE_PRUEFUNG),
+                mitText(4L, 6L, "an der Reparatur"),
+                mitText(5L, 5L, GRUENE_PRUEFUNG)));
+
+    // When / Then
+    assertThat(service.kettenKommentare(7L, 1L, List.of(5L, 6L)))
+        .extracting(CommentService.KettenKommentarView::id)
+        .containsExactly(5L);
+  }
+
+  @Test
+  void kettenKommentare_mitRecht_liefertAlles() {
+    // Given
+    when(anbieter.siehtStoerungen(8L, 1L)).thenReturn(true);
+    when(anbieter.verborgeneKartenIds(8L, 1L)).thenReturn(Set.of());
+    when(comments.findKettenKommentare(List.of(5L, 6L)))
+        .thenReturn(List.of(mitText(3L, 5L, ROTE_PRUEFUNG), mitText(4L, 6L, "Reparatur")));
+
+    // When / Then
+    assertThat(service.kettenKommentare(8L, 1L, List.of(5L, 6L)))
+        .extracting(CommentService.KettenKommentarView::id)
+        .containsExactly(3L, 4L);
   }
 
   @Test
@@ -739,7 +878,7 @@ class CommentServiceTest {
                 new Comment(4L, 6L, null, "Kit", "Text", FIXED, FIXED, LAUF, "TOKEN", "k", "o")));
 
     // When / Then
-    assertThat(service.kettenKommentare(List.of(5L, 6L)))
+    assertThat(service.kettenKommentare(2L, 1L, List.of(5L, 6L)))
         .containsExactly(
             new CommentService.KettenKommentarView(
                 3L, 5L, "Kit", "## Kopf", FIXED, "TOKEN", "kit-nacht", "opus", LAUF, "## Kit-Kopf"),

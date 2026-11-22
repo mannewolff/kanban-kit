@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.card.application.ActorContext;
+import org.mwolff.manban.card.application.Anbietersicht;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.comment.domain.Comment;
 import org.mwolff.manban.project.application.BoardQuelle;
@@ -47,7 +48,8 @@ class CommentServiceVertraulichTest {
             mock(UserLookup.class),
             mock(ActorContext.class),
             Clock.fixed(ANGELEGT, ZoneOffset.UTC),
-            boardQuelle);
+            boardQuelle,
+            mock(Anbietersicht.class));
     when(cardService.requireProjectId(5L)).thenReturn(1L);
   }
 

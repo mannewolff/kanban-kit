@@ -7,6 +7,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.mwolff.manban.attachment.domain.Attachment;
+import org.mwolff.manban.card.application.Anbietersicht;
+import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.project.application.BoardQuelle;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -37,6 +39,11 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Schreibsperre bei fremdem Board (Issue #2164, Plan #2152 A10): Hochladen und Löschen lehnen
  * nach der Rechteprüfung mit {@link org.mwolff.manban.project.application.FremdesBoardException}
  * ab, wenn das Board des Projekts in einem fremden System liegt; Lesen bleibt möglich.
+ *
+ * <p>Störungen beim Anbieter (Issue #2214, Plan #2206 E2): Ohne das Recht {@link
+ * Permission#REPAIR_READ} sind die Anhänge einer verborgenen Karte nicht da — die Liste und das
+ * Hochladen enden wie an einer unbekannten Karte, Herunterladen und Löschen wie bei einem
+ * unbekannten Anhang ({@link Anbietersicht#requireSichtbar}).
  */
 @Service
 public class AttachmentService {
@@ -50,6 +57,7 @@ public class AttachmentService {
   private final BlobDeletionScheduler blobDeletion;
   private final Clock clock;
   private final BoardQuelle boardQuelle;
+  private final Anbietersicht anbieter;
 
   public AttachmentService(
       AttachmentRepository attachments,
@@ -60,7 +68,8 @@ public class AttachmentService {
       PermissionChecker permissions,
       BlobDeletionScheduler blobDeletion,
       Clock clock,
-      BoardQuelle boardQuelle) {
+      BoardQuelle boardQuelle,
+      Anbietersicht anbieter) {
     this.attachments = attachments;
     this.storage = storage;
     this.contentTypeDetector = contentTypeDetector;
@@ -70,12 +79,14 @@ public class AttachmentService {
     this.blobDeletion = blobDeletion;
     this.clock = clock;
     this.boardQuelle = boardQuelle;
+    this.anbieter = anbieter;
   }
 
   @Transactional
   public AttachmentView upload(long userId, long cardId, String filename, byte[] content) {
     long projectId = cardService.requireProjectId(cardId);
     permissions.require(userId, projectId, Permission.ATTACHMENT_CREATE);
+    anbieter.requireSichtbar(userId, cardId);
     boardQuelle.pruefeSchreibbar(projectId);
     if (attachments.countByCardId(cardId) >= properties.maxPerCard()) {
       throw new AttachmentLimitExceededException(properties.maxPerCard());
@@ -100,6 +111,7 @@ public class AttachmentService {
   @Transactional(readOnly = true)
   public List<AttachmentView> list(long userId, long cardId) {
     permissions.requireMembership(userId, cardService.requireProjectId(cardId));
+    anbieter.requireSichtbar(userId, cardId);
     return attachments.findByCardId(cardId).stream().map(AttachmentService::view).toList();
   }
 
@@ -127,6 +139,7 @@ public class AttachmentService {
 
   private Download deliver(long userId, Attachment attachment) {
     permissions.requireMembership(userId, cardService.requireProjectId(attachment.cardId()));
+    requireSichtbar(userId, attachment);
     return new Download(
         attachment.filename(),
         attachment.contentType(),
@@ -140,6 +153,7 @@ public class AttachmentService {
         attachments.findById(attachmentId).orElseThrow(AttachmentNotFoundException::new);
     long projectId = cardService.requireProjectId(attachment.cardId());
     permissions.require(userId, projectId, Permission.ATTACHMENT_DELETE);
+    requireSichtbar(userId, attachment);
     boardQuelle.pruefeSchreibbar(projectId);
     // Metadaten sofort, den Blob über die Outbox nachziehen (Issue #503): Löschte man den Blob
     // direkt und bräche der DB-Teil danach ab, zeigte die verbliebene Metadaten-Zeile auf ein
@@ -147,6 +161,15 @@ public class AttachmentService {
     // schlimmste Fall ein kurzzeitig verwaister Blob, den der Worker nach dem Commit entfernt.
     blobDeletion.scheduleDelete(attachment.objectKey());
     attachments.deleteById(attachment.requireId());
+  }
+
+  /** Ein Anhang an einer verborgenen Karte endet wie ein unbekannter (kein Existenz-Leak). */
+  private void requireSichtbar(long userId, Attachment attachment) {
+    try {
+      anbieter.requireSichtbar(userId, attachment.cardId());
+    } catch (CardNotFoundException e) {
+      throw new AttachmentNotFoundException(e);
+    }
   }
 
   private static AttachmentView view(Attachment a) {

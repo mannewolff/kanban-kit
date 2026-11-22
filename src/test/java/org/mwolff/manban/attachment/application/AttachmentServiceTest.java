@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mwolff.manban.attachment.domain.Attachment;
+import org.mwolff.manban.card.application.Anbietersicht;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.project.application.BoardQuelle;
@@ -32,6 +33,9 @@ import org.mwolff.manban.project.application.ProjectNotFoundException;
 import org.mwolff.manban.project.domain.Permission;
 
 /** Verhaltenstests der Anhang-Use-Cases (Mockito an den Ports). */
+// PMD.TooManyMethods: je Use-Case und Regel ein kleiner @Test; mit der Sicht des Anbieters (Issue
+// #2214) kamen die Fälle der verborgenen Karte dazu, die das Paket ausdrücklich hier verlangt.
+@SuppressWarnings("PMD.TooManyMethods")
 class AttachmentServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -44,6 +48,7 @@ class AttachmentServiceTest {
   private PermissionChecker permissions;
   private BlobDeletionScheduler blobDeletion;
   private BoardQuelle boardQuelle;
+  private Anbietersicht anbieter;
   private AttachmentService service;
 
   private static Attachment attachment() {
@@ -60,6 +65,7 @@ class AttachmentServiceTest {
     permissions = mock(PermissionChecker.class);
     blobDeletion = mock(BlobDeletionScheduler.class);
     boardQuelle = mock(BoardQuelle.class);
+    anbieter = mock(Anbietersicht.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
         new AttachmentService(
@@ -71,7 +77,8 @@ class AttachmentServiceTest {
             permissions,
             blobDeletion,
             clock,
-            boardQuelle);
+            boardQuelle,
+            anbieter);
   }
 
   private void cardResolves() {
@@ -205,7 +212,8 @@ class AttachmentServiceTest {
             permissions,
             blobDeletion,
             Clock.fixed(FIXED, ZoneOffset.UTC),
-            boardQuelle);
+            boardQuelle,
+            anbieter);
     cardResolves();
     when(attachments.countByCardId(5L)).thenReturn(1L);
 
@@ -256,6 +264,62 @@ class AttachmentServiceTest {
         .singleElement()
         .extracting(AttachmentService.AttachmentView::filename)
         .isEqualTo("note.txt");
+  }
+
+  @Test
+  void list_anEinerVerborgenenKarte_endetWieAnEinerUnbekannten() {
+    // Given (Issue #2214, Plan #2206 E2)
+    cardResolves();
+    doThrow(new CardNotFoundException()).when(anbieter).requireSichtbar(1L, 5L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.list(1L, 5L)).isInstanceOf(CardNotFoundException.class);
+    verify(attachments, never()).findByCardId(5L);
+  }
+
+  @Test
+  void download_anEinerVerborgenenKarte_endetWieEinUnbekannterAnhang() {
+    // Given
+    when(attachments.findById(7L)).thenReturn(Optional.of(attachment()));
+    cardResolves();
+    CardNotFoundException verborgen = new CardNotFoundException();
+    doThrow(verborgen).when(anbieter).requireSichtbar(1L, 5L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.download(1L, 7L))
+        .isInstanceOf(AttachmentNotFoundException.class)
+        .hasMessage("Anhang nicht gefunden")
+        .hasCause(verborgen);
+    assertThatThrownBy(() -> service.downloadOnCard(1L, 5L, 7L))
+        .isInstanceOf(AttachmentNotFoundException.class);
+    verify(storage, never()).get(any());
+  }
+
+  @Test
+  void upload_anEinerVerborgenenKarte_endetWieAnEinerUnbekannten() {
+    // Given
+    cardResolves();
+    doThrow(new CardNotFoundException()).when(anbieter).requireSichtbar(1L, 5L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.upload(1L, 5L, "a.txt", new byte[] {1}))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(attachments, never()).save(any());
+    verify(storage, never()).put(any(), any(), any());
+  }
+
+  @Test
+  void delete_anEinerVerborgenenKarte_endetWieEinUnbekannterAnhang() {
+    // Given
+    when(attachments.findById(7L)).thenReturn(Optional.of(attachment()));
+    cardResolves();
+    doThrow(new CardNotFoundException()).when(anbieter).requireSichtbar(1L, 5L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.delete(1L, 7L))
+        .isInstanceOf(AttachmentNotFoundException.class);
+    verify(attachments, never()).deleteById(7L);
+    verify(blobDeletion, never()).scheduleDelete(any());
   }
 
   @Test

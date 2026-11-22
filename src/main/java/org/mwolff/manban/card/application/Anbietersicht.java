@@ -80,6 +80,17 @@ public final class Anbietersicht {
         .collect(Collectors.toUnmodifiableSet());
   }
 
+  /**
+   * Die IDs der Karten des Projekts, die der Aufrufer nicht sieht; leer, wenn er Störungen sieht —
+   * für Module, die Einträge je Karten-ID führen, etwa Kommentare (Issue #2214).
+   */
+  public Set<Long> verborgeneKartenIds(long userId, long projectId) {
+    if (siehtStoerungen(userId, projectId)) {
+      return Set.of();
+    }
+    return Set.copyOf(reparaturkarten(projectId));
+  }
+
   /** Ob die Karte für den Aufrufer verborgen ist: ohne das Recht und mit einem Reparatur-Label. */
   public boolean istVerborgen(long userId, long projectId, Card karte) {
     return nummerVerborgen(karte.number(), verborgeneNummern(userId, projectId));

@@ -54,7 +54,9 @@ import org.mwolff.manban.project.domain.Permission;
  * Datenbank sie wirklich hält, belegt {@code AnlassRepositoryIT}.
  */
 // PMD.ExcessiveImports: Der Test verdrahtet alle Ports der Erkennung und baut ihre Datentypen.
-@SuppressWarnings("PMD.ExcessiveImports")
+// PMD.TooManyMethods: je Regel der Zustellung ein kleiner @Test; mit den Reparaturkarten (Issue
+// #2214) kamen die Fälle für Kunde und Mitglied dazu.
+@SuppressWarnings({"PMD.ExcessiveImports", "PMD.TooManyMethods"})
 class BenachrichtigungErkennungKartenTest {
 
   private static final Instant JETZT = Instant.parse("2026-11-09T12:00:00Z");
@@ -374,6 +376,52 @@ class BenachrichtigungErkennungKartenTest {
     when(permissions.hasPermission(PERSON, PROJEKT, Permission.TICKET_READ)).thenReturn(false);
     when(permissions.hatNachtlaufZugriff(PERSON, PROJEKT)).thenReturn(true);
     karteTraegt("kit:klaeren");
+    ereignis(1L, "kit:klaeren", ZEITPUNKT, null);
+
+    erkennung.erkenneKarten();
+
+    assertThat(anlaesse.zustellungen).isEmpty();
+  }
+
+  @Test
+  void einKundeBekommtKeineMailZuEinerReparaturkarte_einMitgliedSchon() {
+    // Issue #2214, Plan #2206 E16: Kunde und Mitglied haben Mails eingeschaltet.
+    long kunde = 12L;
+    when(einstellungen.eingeschaltetePersonen(PROJEKT))
+        .thenReturn(
+            List.of(
+                new EingeschaltetePerson(PERSON, VOR_DEM_EREIGNIS),
+                new EingeschaltetePerson(kunde, VOR_DEM_EREIGNIS)));
+    when(permissions.hasPermission(kunde, PROJEKT, Permission.TICKET_READ)).thenReturn(true);
+    when(permissions.hasPermission(PERSON, PROJEKT, Permission.REPAIR_READ)).thenReturn(true);
+    karteTraegt("kit:repair", "kit:klaeren");
+    ereignis(1L, "kit:klaeren", ZEITPUNKT, null);
+
+    erkennung.erkenneKarten();
+
+    assertThat(anlaesse.zustellungen).extracting(NeueZustellung::userId).containsExactly(PERSON);
+  }
+
+  @Test
+  void einKundeBekommtDieMailZuEinerGewoehnlichenKarte() {
+    long kunde = 12L;
+    when(einstellungen.eingeschaltetePersonen(PROJEKT))
+        .thenReturn(List.of(new EingeschaltetePerson(kunde, VOR_DEM_EREIGNIS)));
+    when(permissions.hasPermission(kunde, PROJEKT, Permission.TICKET_READ)).thenReturn(true);
+    karteTraegt("kit:klaeren");
+    ereignis(1L, "kit:klaeren", ZEITPUNKT, null);
+
+    erkennung.erkenneKarten();
+
+    assertThat(anlaesse.zustellungen).extracting(NeueZustellung::userId).containsExactly(kunde);
+    verify(permissions, never()).hasPermission(kunde, PROJEKT, Permission.REPAIR_READ);
+  }
+
+  @Test
+  void anEinerReparaturkarteReichtDasRechtAufStoerungenNichtOhneTicketRead() {
+    when(permissions.hasPermission(PERSON, PROJEKT, Permission.TICKET_READ)).thenReturn(false);
+    when(permissions.hasPermission(PERSON, PROJEKT, Permission.REPAIR_READ)).thenReturn(true);
+    karteTraegt("kit:repair", "kit:klaeren");
     ereignis(1L, "kit:klaeren", ZEITPUNKT, null);
 
     erkennung.erkenneKarten();

@@ -346,7 +346,7 @@ class CommentRepositoryIT extends AbstractIntegrationTest {
     comments.save(kitKommentar(cardId, "## Frueh", T1).withBody("Hand", null, "SESSION", T2));
     comments.save(kitKommentar(fremdeKarte, "## Andere Karte", T1));
 
-    assertThat(service.kettenKommentare(List.of(cardId, zweiteKarte)))
+    assertThat(service.kettenKommentare(userId, projectId, List.of(cardId, zweiteKarte)))
         .extracting(
             CommentService.KettenKommentarView::cardId,
             CommentService.KettenKommentarView::body,
@@ -360,7 +360,7 @@ class CommentRepositoryIT extends AbstractIntegrationTest {
 
   @Test
   void kettenKommentareOhneKartenIstLeer() {
-    assertThat(service.kettenKommentare(List.of())).isEmpty();
+    assertThat(service.kettenKommentare(userId, projectId, List.of())).isEmpty();
   }
 
   @Test

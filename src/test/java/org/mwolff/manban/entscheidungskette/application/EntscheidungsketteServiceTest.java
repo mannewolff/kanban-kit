@@ -6,6 +6,8 @@ import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -16,12 +18,14 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.auth.application.UserSummary;
+import org.mwolff.manban.card.application.Anbietersicht;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.KartenKetteLeser;
@@ -54,7 +58,9 @@ import org.mwolff.manban.project.application.ProjectNotFoundException;
 /** Der Dienst der Entscheidungskette mit gestellten Fassaden (Issue #2117). */
 // PMD.ExcessiveImports: Der Test stellt die Sichten von card, comment, project und auth und prüft
 // die Ausgabe mit den Typen der Rechnung — die Importe zählen genau diese Grenze des Dienstes.
-@SuppressWarnings("PMD.ExcessiveImports")
+// PMD.CouplingBetweenObjects: aus demselben Grund; die Sicht des Anbieters (Issue #2214) ist eine
+// weitere gestellte Fassade.
+@SuppressWarnings({"PMD.ExcessiveImports", "PMD.CouplingBetweenObjects"})
 class EntscheidungsketteServiceTest {
 
   private static final long NUTZER = 7;
@@ -74,9 +80,10 @@ class EntscheidungsketteServiceTest {
   private final KitReviewVorReadyReader reviewVorReady = mock(KitReviewVorReadyReader.class);
   private final UserLookup users = mock(UserLookup.class);
   private final BoardQuelle boardQuelle = mock(BoardQuelle.class);
+  private final Anbietersicht anbieter = mock(Anbietersicht.class);
   private final EntscheidungsketteService service =
       new EntscheidungsketteService(
-          cards, permissions, leser, comments, reviewVorReady, users, boardQuelle);
+          cards, permissions, leser, comments, reviewVorReady, users, boardQuelle, anbieter);
 
   @BeforeEach
   void stelle() {
@@ -116,7 +123,7 @@ class EntscheidungsketteServiceTest {
         .thenReturn(false);
 
     assertThat(service.kette(NUTZER, PAKET)).isEqualTo(EntscheidungsketteView.UNSICHTBAR);
-    verify(comments, never()).kettenKommentare(anyCollection());
+    verify(comments, never()).kettenKommentare(anyLong(), anyLong(), anyCollection());
   }
 
   @Test
@@ -147,7 +154,7 @@ class EntscheidungsketteServiceTest {
 
     assertThat(service.kette(NUTZER, IDEE)).isEqualTo(EntscheidungsketteView.UNSICHTBAR);
     assertThat(service.kette(NUTZER, 99L)).isEqualTo(EntscheidungsketteView.UNSICHTBAR);
-    verify(comments, never()).kettenKommentare(anyCollection());
+    verify(comments, never()).kettenKommentare(anyLong(), anyLong(), anyCollection());
   }
 
   /**
@@ -177,7 +184,7 @@ class EntscheidungsketteServiceTest {
     // Ein Captor für Collection<Long> lässt sich nur über die rohe Klasse anlegen.
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Collection<Long>> ids = ArgumentCaptor.forClass(Collection.class);
-    verify(comments).kettenKommentare(ids.capture());
+    verify(comments).kettenKommentare(eq(NUTZER), eq(PROJEKT), ids.capture());
     assertThat(ids.getValue()).containsExactly(PAKET, PLAN, IDEE);
     assertThat(glieder(sicht, Dokumentart.PAKET, Gliedart.ISSUE_REVIEW))
         .extracting(GliedView::zustand)
@@ -205,7 +212,7 @@ class EntscheidungsketteServiceTest {
                     zug(PAKET, ERIKA, "MOVED", "READY", T0.plusSeconds(20)),
                     zug(PAKET, GELOESCHT, "MOVED", "IN_PROGRESS", T0.plusSeconds(30))),
                 List.of()));
-    when(comments.kettenKommentare(anyCollection()))
+    when(comments.kettenKommentare(anyLong(), anyLong(), anyCollection()))
         .thenReturn(
             List.of(
                 kommentar(
@@ -254,7 +261,7 @@ class EntscheidungsketteServiceTest {
                 List.of(),
                 List.of(),
                 List.of()));
-    when(comments.kettenKommentare(anyCollection()))
+    when(comments.kettenKommentare(anyLong(), anyLong(), anyCollection()))
         .thenReturn(
             List.of(
                 kommentar(
@@ -299,7 +306,7 @@ class EntscheidungsketteServiceTest {
     KettenKarte paket = karte(PAKET, 30, "Paket", "ARBEITSPAKET");
     when(leser.lade(PAKET))
         .thenReturn(new KartenKette(paket, List.of(), List.of(), List.of(), List.of(), List.of()));
-    when(comments.kettenKommentare(anyCollection()))
+    when(comments.kettenKommentare(anyLong(), anyLong(), anyCollection()))
         .thenReturn(
             List.of(
                 kommentar(
@@ -433,6 +440,79 @@ class EntscheidungsketteServiceTest {
     assertThat(freigabe.ausgefuehrtVon())
         .isEqualTo(new AkteurView(Akteurtyp.WERKZEUG, "kit-bot", null, false));
     verify(users, never()).findById(anyLong());
+  }
+
+  @Test
+  void eineVerborgeneKarteEndetWieEineUnbekannte() {
+    // Issue #2214, Plan #2206 E2: ohne das Recht auf Störungen.
+    doThrow(new CardNotFoundException()).when(anbieter).requireSichtbar(NUTZER, PAKET);
+
+    assertThatThrownBy(() -> service.kette(NUTZER, PAKET))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(leser, never()).lade(anyLong());
+  }
+
+  @Test
+  void verborgeneKartenFehlenInDerKetteSamtKommentaren() {
+    KettenKarte paket = karte(PAKET, 30, "Paket", "ARBEITSPAKET");
+    KettenKarte plan = karte(PLAN, 20, "[Plan] Weg", "PLAN");
+    KettenKarte reparatur = karte(40, 40, "Reparatur", "ARBEITSPAKET");
+    when(leser.lade(PAKET))
+        .thenReturn(
+            new KartenKette(
+                paket,
+                List.of(new KettenGlied(GliedZustand.VORHANDEN, 20, plan)),
+                List.of(new KettenGlied(GliedZustand.VORHANDEN, 40, reparatur)),
+                List.of(),
+                List.of(),
+                List.of()));
+    when(anbieter.verborgeneNummern(NUTZER, PROJEKT)).thenReturn(Set.of(40));
+
+    service.kette(NUTZER, PAKET);
+
+    // Ein Captor für Collection<Long> lässt sich nur über die rohe Klasse anlegen.
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Collection<Long>> ids = ArgumentCaptor.forClass(Collection.class);
+    verify(comments).kettenKommentare(eq(NUTZER), eq(PROJEKT), ids.capture());
+    assertThat(ids.getValue()).containsExactly(PAKET, PLAN);
+  }
+
+  @Test
+  void ohneVerborgene_streichtGliederIdeenVerlaufUndLabelsVerborgenerKarten() {
+    KettenKarte paket = karte(PAKET, 30, "Paket", "ARBEITSPAKET");
+    KettenKarte plan = karte(PLAN, 20, "[Plan] Weg", "PLAN");
+    KettenKarte reparatur = karte(40, 40, "Reparatur", "ARBEITSPAKET");
+    KettenKarte idee = karte(IDEE, 5, "[Idee] Einfall", "IDEE");
+    KettenKarte verborgeneIdee = karte(6, 6, "[Idee] Störung", "IDEE");
+    KettenGlied vorfahr = new KettenGlied(GliedZustand.VORHANDEN, 20, plan);
+    KettenGlied fremd = new KettenGlied(GliedZustand.ANDERES_PROJEKT, null, null);
+    KettenAktivitaet amPaket = zug(PAKET, ERIKA, "CREATED", null, T0);
+    KettenLabelEreignis amPlan =
+        new KettenLabelEreignis(PLAN, "kit:night", T0, null, "SESSION", null, null);
+    KartenKette kette =
+        new KartenKette(
+            paket,
+            List.of(
+                new KettenGlied(GliedZustand.VORHANDEN, 41, karte(41, 41, "R", "PLAN")), vorfahr),
+            List.of(
+                new KettenGlied(GliedZustand.VORHANDEN, 40, reparatur),
+                new KettenGlied(GliedZustand.PAPIERKORB, 42, null),
+                fremd),
+            List.of(verborgeneIdee, idee),
+            List.of(zug(40, ERIKA, "CREATED", null, T0), amPaket, zug(6, ERIKA, "MOVED", null, T0)),
+            List.of(
+                new KettenLabelEreignis(41, "kit:repair", T0, null, "SESSION", null, null),
+                amPlan));
+
+    KartenKette ohne = EntscheidungsketteService.ohneVerborgene(kette, Set.of(40, 41, 42, 6));
+
+    assertThat(ohne.karte()).isEqualTo(paket);
+    assertThat(ohne.vorfahren()).containsExactly(vorfahr);
+    assertThat(ohne.nachfahren()).containsExactly(fremd);
+    assertThat(ohne.ideen()).containsExactly(idee);
+    assertThat(ohne.aktivitaeten()).containsExactly(amPaket);
+    assertThat(ohne.labelEreignisse()).containsExactly(amPlan);
+    assertThat(EntscheidungsketteService.ohneVerborgene(kette, Set.of())).isSameAs(kette);
   }
 
   @Test
