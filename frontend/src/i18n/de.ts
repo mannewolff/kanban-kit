@@ -2395,6 +2395,32 @@ export const de = {
     },
   },
 
+  /** Rückfragen der KI im Kartendialog, `RueckfrageKarte` (Issue #2217, Plan #2206 E8, E11). */
+  RUECKFRAGE: {
+    TITEL: 'Rückfrage der KI',
+    EMPFEHLUNG: (text: string) => `Empfehlung: ${text}`,
+    BEGRUENDUNG: (text: string) => `Begründung: ${text}`,
+    MOEGLICHKEITEN: (frage: string) => `Möglichkeiten zu: ${frage}`,
+    WEG_HINWEIS: 'Genau ein Weg ist zu wählen.',
+    ALLES_UEBERNEHMEN: 'Alles übernehmen',
+    ANDERS_ENTSCHEIDEN: 'Anders entscheiden',
+    EIGENE_ANTWORT: 'Eigene Antwort',
+    ABSENDEN: 'Absenden',
+    ABBRECHEN: 'Abbrechen',
+    SPAETER: 'Später',
+    GEWAEHLT: (text: string) => `Gewählt: ${text}`,
+    EMPFEHLUNG_UEBERNOMMEN: 'Empfehlung übernommen',
+    EIGENE: (text: string) => `Eigene Antwort: ${text}`,
+    ZURUECKGESTELLT: 'Zurückgestellt – die Rückfrage bleibt offen, bis auch diese Frage beantwortet ist.',
+    UEBERMITTELT: 'Antwort übermittelt, die KI arbeitet daran',
+    FEHLER: (meldung: string) => `Die Antwort ließ sich nicht übermitteln: ${meldung}`,
+    VORSCHAU_ANSEHEN: 'Vorschau ansehen',
+    FREIGEBEN: 'Veröffentlichen freigeben',
+    FREIGABE_ERTEILT: 'Freigabe erteilt, wird veröffentlicht',
+    NEUERE_VORSCHAU: 'Neuere Vorschau vorhanden',
+    VEROEFFENTLICHT_UNTER: 'Veröffentlicht unter',
+  },
+
   /** Seitenrahmen der API-Übersicht und Ausprobieren (Issue #1660, E2); Swagger UI und das OpenAPI-Dokument bleiben, wie sie sind. */
   API_UEBERSICHT: {
     TITEL: 'API-Schnittstelle',

@@ -50,6 +50,18 @@ import {
 import { vorhabenKostenApi as defaultVorhabenKostenApi, type VorhabenKostenApi, type VorhabenKostenView } from '../api/vorhabenKosten'
 import { VorhabenKostenZeile } from './leitstand/VorhabenKostenZeile'
 import { Entscheidungskette } from './Entscheidungskette'
+import { RueckfrageKarte } from './anbieter/RueckfrageKarte'
+import {
+  rueckfragenApi as defaultRueckfragenApi,
+  type Rueckfrage,
+  type RueckfragenApi,
+} from '../api/rueckfragen'
+import {
+  auslieferungApi as defaultAuslieferungApi,
+  type AuslieferungApi,
+  type AuslieferungZuletzt,
+} from '../api/auslieferung'
+import { KOEPFE, traegtKopf } from '../lib/kitWortformen'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
 import { KettenStufenleiste, traegtStufenleiste, type LabelAenderung } from './nachtlauf/KettenStufenleiste'
 import { Wartegrund } from './nachtlauf/Wartegrund'
@@ -1205,6 +1217,95 @@ function KartenDialogAktionen({
   )
 }
 
+/** Rückfragen einer Karte mit der jüngsten Auslieferung des Projekts (Issue #2217). */
+interface RueckfragenStand {
+  /** Leer ohne Rückfrage, bei einem Ladefehler und solange sie laden (Plan #2206 E15). */
+  rueckfragen: Rueckfrage[]
+  zuletzt: AuslieferungZuletzt | null
+  beantwortet: (neu: Rueckfrage) => void
+}
+
+/**
+ * Lädt die Rückfragen der Karte und — nur an einer Freigabe-Rückfrage mit bekanntem Projekt — die
+ * jüngste Auslieferung für „Veröffentlicht unter …“. Nach einer Antwort steht ein neuer Kommentar an
+ * der Karte (`kommentareNeu`); der Stand der Rückfrage kommt aus der Antwort des Servers.
+ */
+function useRueckfragen(
+  cardId: number,
+  projectId: number | undefined,
+  api: Pick<RueckfragenApi, 'liste'>,
+  auslieferung: Pick<AuslieferungApi, 'zuletzt'>,
+  kommentareNeu: () => void,
+): RueckfragenStand {
+  const [rueckfragen, setRueckfragen] = useState<Rueckfrage[]>([])
+  const [zuletzt, setZuletzt] = useState<AuslieferungZuletzt | null>(null)
+
+  useEffect(() => {
+    void api.liste(cardId).then(setRueckfragen).catch(() => setRueckfragen([]))
+  }, [cardId, api])
+
+  const freigabeProjekt = rueckfragen.some((r) => r.commit !== null) ? projectId : undefined
+  useEffect(() => {
+    if (freigabeProjekt === undefined) {
+      return
+    }
+    void auslieferung.zuletzt(freigabeProjekt).then(setZuletzt).catch(() => setZuletzt(null))
+  }, [freigabeProjekt, auslieferung])
+
+  const beantwortet = (neu: Rueckfrage) => {
+    setRueckfragen((alle) => alle.map((r) => (r.kommentarId === neu.kommentarId ? neu : r)))
+    kommentareNeu()
+  }
+  return { rueckfragen, zuletzt, beantwortet }
+}
+
+/**
+ * Rückfragen und Antworten stehen als Rückfrage im Verlauf, nicht noch einmal als Kommentar — aber
+ * nur, wenn der Server Rückfragen liefert; sonst bleibt alles wie bisher (Plan #2206 E15).
+ */
+function sichtbareKommentare(rueckfragen: readonly Rueckfrage[], comments: Comment[]): Comment[] {
+  if (rueckfragen.length === 0) {
+    return comments
+  }
+  const ids = new Set(rueckfragen.map((r) => r.kommentarId))
+  return comments.filter((c) => !ids.has(c.id) && !traegtKopf(KOEPFE.antwort, c.body))
+}
+
+/** Die Rückfragen der KI im Block Verlauf, vor den Kommentaren (Issue #2217); ohne Rückfrage nichts. */
+function RueckfragenAbschnitt({
+  cardId,
+  stand,
+  gesperrt,
+  api,
+}: Readonly<{
+  cardId: number
+  stand: RueckfragenStand
+  gesperrt: boolean
+  api: Pick<RueckfragenApi, 'antworten'>
+}>) {
+  if (stand.rueckfragen.length === 0) {
+    return null
+  }
+  return (
+    <>
+      <Divider />
+      <Stack spacing={1}>
+        {stand.rueckfragen.map((r) => (
+          <RueckfrageKarte
+            key={r.kommentarId}
+            cardId={cardId}
+            rueckfrage={r}
+            zuletzt={stand.zuletzt}
+            gesperrt={gesperrt}
+            api={api}
+            onBeantwortet={stand.beantwortet}
+          />
+        ))}
+      </Stack>
+    </>
+  )
+}
+
 interface Props {
   card: CardDetail
   canEdit: boolean
@@ -1283,6 +1384,10 @@ interface Props {
   vorhabenKostenApi?: Pick<VorhabenKostenApi, 'jeVorhaben'>
   /** Abruf der Entscheidungskette (Issue #2118); ohne Angabe der echte Endpunkt. */
   entscheidungsketteApi?: Pick<EntscheidungsketteApi, 'kette'>
+  /** Rückfragen der KI lesen und beantworten (Issue #2217); ohne Angabe die echten Endpunkte. */
+  rueckfragenApi?: Pick<RueckfragenApi, 'liste' | 'antworten'>
+  /** Jüngste Vorschau und Veröffentlichung des Projekts (Issue #2217); ohne Angabe der echte Endpunkt. */
+  auslieferungApi?: Pick<AuslieferungApi, 'zuletzt'>
 }
 
 /**
@@ -1331,6 +1436,8 @@ function CardDetailModalView({
   nightRunsApi,
   vorhabenKostenApi = defaultVorhabenKostenApi,
   entscheidungsketteApi = defaultEntscheidungsketteApi,
+  rueckfragenApi = defaultRueckfragenApi,
+  auslieferungApi = defaultAuslieferungApi,
   onOpenDependency,
   neuLaden = 0,
 }: Readonly<ViewProps>) {
@@ -1521,6 +1628,10 @@ function CardDetailModalView({
   useEffect(() => {
     void cardsApi.getActivity(card.id).then(setActivities).catch(() => setActivities([]))
   }, [card.id, cardsApi])
+
+  const rueckfragenStand = useRueckfragen(card.id, projectId, rueckfragenApi, auslieferungApi, () =>
+    void commentsApi.list(card.id).then((list) => setComments([...list].reverse())),
+  )
 
   // Die volle Beschreibung beim Öffnen nachladen (Issue #769) — nach dem `aktiv`-Muster des
   // Herkunftsbaum-Effekts: Der Cleanup verwirft späte Antworten, ein Kartenwechsel setzt auf
@@ -2182,9 +2293,16 @@ function CardDetailModalView({
                 onUpload={(file) => void uploadFile(file)}
               />
 
+              <RueckfragenAbschnitt
+                cardId={card.id}
+                stand={rueckfragenStand}
+                gesperrt={vorschau}
+                api={rueckfragenApi}
+              />
+
               <Divider />
               <CommentsSection
-                comments={comments}
+                comments={sichtbareKommentare(rueckfragenStand.rueckfragen, comments)}
                 currentUserId={user?.userId}
                 canModerateComments={canModerateComments}
                 editingCommentId={editingCommentId}
@@ -2371,6 +2489,8 @@ export function CardDetailModal(props: Readonly<Props>) {
           cardsApi={cardsApi}
           vorhabenKostenApi={props.vorhabenKostenApi}
           entscheidungsketteApi={props.entscheidungsketteApi}
+          rueckfragenApi={props.rueckfragenApi}
+          auslieferungApi={props.auslieferungApi}
           onClose={() => nimmAb(eintrag)}
           onChanged={() => markiereGeaendert(eintrag.ebene)}
           onOpenDependency={onOpenDependency}

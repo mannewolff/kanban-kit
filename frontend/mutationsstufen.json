@@ -100,7 +100,8 @@
         "src/components/LabelErklaerung.tsx",
         "src/components/Erklaerung.tsx",
         "src/components/ErklaerungInfo.tsx",
-        "src/components/Entscheidungskette.tsx"
+        "src/components/Entscheidungskette.tsx",
+        "src/components/anbieter/RueckfrageKarte.tsx"
       ],
       "testMuster": [
         "src/components/CardDetailModal.test.tsx",
@@ -115,7 +116,8 @@
         "src/components/LabelErklaerung.test.tsx",
         "src/components/Erklaerung.test.tsx",
         "src/components/ErklaerungInfo.test.tsx",
-        "src/components/Entscheidungskette.test.tsx"
+        "src/components/Entscheidungskette.test.tsx",
+        "src/components/anbieter/RueckfrageKarte.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 2,

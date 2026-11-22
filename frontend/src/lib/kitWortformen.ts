@@ -245,3 +245,27 @@ export const SZENARIO_SCHRITT: Wortform = {
   de: schritt('Angenommen|Wenn|Dann|Und|Aber'),
   en: schritt('Given|When|Then|And|But'),
 }
+
+/**
+ * Abschnitt Köpfe: die Köpfe der Kommentare, die der Leitstand mit der KI austauscht (Issue #2217,
+ * Plan #2206 E9). Gelesen werden beide Fassungen, unabhängig von der Sprache der Oberfläche; die
+ * Fassungen folgen `KitMeldungen.Zeile` im Server.
+ */
+export const KOEPFE = {
+  rueckfrage: ['## Rückfrage', '## Question'],
+  antwort: ['## Antwort', '## Answer'],
+} as const satisfies Record<string, Wortpaar>
+
+/**
+ * Ob die erste nichtleere Zeile des Texts der Kopf ist, in einer der beiden Sprachen. Der Kopf steht
+ * allein auf der Zeile; führender und folgender Leerraum und die Schreibung zählen nicht — wie im
+ * Server (`Kopfsprache.vonKopf`).
+ */
+export function traegtKopf(kopf: Wortpaar, text: string): boolean {
+  const zeile = text.split('\n').find((z) => z.trim() !== '')
+  if (zeile === undefined) {
+    return false
+  }
+  const roh = zeile.trim().toLowerCase()
+  return kopf.some((fassung) => fassung.toLowerCase() === roh)
+}
