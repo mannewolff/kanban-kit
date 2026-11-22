@@ -35,6 +35,10 @@ import org.mwolff.manban.deployment.domain.Auslieferungskennzahlen.Woche;
  * <p><b>Ausfälle (E8, E9):</b> Ein Ausfall reicht vom ersten gescheiterten Versuch einer
  * ununterbrochenen Folge bis zum nächsten erfolgreichen und zählt mit voller Dauer im Fenster
  * seines Endes. Eine noch offene Folge steht in {@code outageSince}, nicht im Median.
+ *
+ * <p><b>Vorschauen (Issue #2215, Plan #2206 E10):</b> Ein Versuch der Art Vorschau zählt in keiner
+ * Kennzahl, auch nicht als erste Meldung eines Commits; eine Meldung ohne Art zählt als
+ * Veröffentlichung.
  */
 public final class AuslieferungsErmittlung {
 
@@ -51,7 +55,8 @@ public final class AuslieferungsErmittlung {
       Collection<Auslieferungsversuch> versuche,
       Collection<GemeldeterCommit> commits,
       Instant jetzt) {
-    List<Auslieferungsversuch> geordnet = versuche.stream().sorted(FRUEHER).toList();
+    List<Auslieferungsversuch> geordnet =
+        versuche.stream().filter(v -> !v.istVorschau()).sorted(FRUEHER).toList();
     List<Auslieferungsversuch> imFenster =
         geordnet.stream().filter(v -> imFenster(v.finishedAt(), jetzt)).toList();
     int erfolge = (int) imFenster.stream().filter(AuslieferungsErmittlung::erfolgreich).count();

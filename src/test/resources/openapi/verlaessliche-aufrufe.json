@@ -979,6 +979,11 @@
     },
     "DeploymentRequest" : {
       "properties" : {
+        "art" : {
+          "enum" : [ "vorschau", "veroeffentlichung" ],
+          "pattern" : "vorschau|veroeffentlichung",
+          "type" : "string"
+        },
         "attemptId" : {
           "maxLength" : 200,
           "minLength" : 0,
@@ -1003,6 +1008,12 @@
         "revision" : {
           "maxLength" : 64,
           "minLength" : 0,
+          "type" : "string"
+        },
+        "url" : {
+          "maxLength" : 2000,
+          "minLength" : 0,
+          "pattern" : "https://[^\\s]+",
           "type" : "string"
         }
       },

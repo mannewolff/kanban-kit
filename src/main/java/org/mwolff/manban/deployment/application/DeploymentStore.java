@@ -2,6 +2,7 @@ package org.mwolff.manban.deployment.application;
 
 import java.time.Instant;
 import java.util.Optional;
+import org.mwolff.manban.deployment.domain.Auslieferungsart;
 import org.mwolff.manban.deployment.domain.Auslieferungsversuch;
 
 /**
@@ -29,8 +30,16 @@ public interface DeploymentStore {
   Auslieferungsdaten ladeAuswertung(long projectId, Instant fensterBeginn);
 
   /**
-   * Der Versuch mit dem größten {@code finishedAt}, gleich welchen Ausgangs; bei Gleichstand der
-   * zuletzt eingegangene. Leer ohne Versuch.
+   * Die Veröffentlichung mit dem größten {@code finishedAt}, gleich welchen Ausgangs; bei
+   * Gleichstand die zuletzt eingegangene. Eine Vorschau zählt nicht (Issue #2215, Plan #2206 E10).
+   * Leer ohne Veröffentlichung.
    */
   Optional<Auslieferungsversuch> letzterVersuch(long projectId);
+
+  /**
+   * Die jüngste Meldung der Art, gleich welchen Ausgangs: größtes {@code finishedAt}, bei
+   * Gleichstand die zuletzt eingegangene (Issue #2215, Plan #2206 E10). Zur Veröffentlichung zählt
+   * auch eine Meldung ohne Art. Leer ohne.
+   */
+  Optional<GemeldeterStand> juengster(long projectId, Auslieferungsart art);
 }

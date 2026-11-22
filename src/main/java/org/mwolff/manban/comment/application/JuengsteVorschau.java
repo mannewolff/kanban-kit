@@ -5,8 +5,9 @@ import org.mwolff.manban.comment.domain.Vorschau;
 
 /**
  * Port: die jüngste gemeldete Vorschau eines Projekts, an der die Auswertung erkennt, ob eine
- * Freigabe-Rückfrage überholt ist (Issue #2210, Plan #2206 E11). Bis die Auslieferung Vorschauen
- * kennt, meldet die Standard-Umsetzung keine; das Paket zur Auslieferung ersetzt sie.
+ * Freigabe-Rückfrage überholt ist (Issue #2210, Plan #2206 E11). Umgesetzt wird er im Modul {@code
+ * deployment} aus den gemeldeten Vorschauen (Issue #2215); der Port prüft keine Rechte, die Prüfung
+ * liegt beim Aufrufer.
  */
 @FunctionalInterface
 public interface JuengsteVorschau {

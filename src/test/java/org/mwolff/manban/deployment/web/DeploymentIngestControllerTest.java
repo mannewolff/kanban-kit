@@ -71,7 +71,7 @@ class DeploymentIngestControllerTest {
   }
 
   private static DeploymentRequest anfrage(List<DeploymentCommitRequest> commits) {
-    return new DeploymentRequest("lauf-1", Ausgang.SUCCESS, ENDE, "abc123", commits);
+    return new DeploymentRequest("lauf-1", Ausgang.SUCCESS, ENDE, "abc123", commits, null, null);
   }
 
   private static DeploymentRequest anfrage() {
@@ -193,7 +193,7 @@ class DeploymentIngestControllerTest {
 
   @Test
   void jedesPflichtfeldFehltBenannt() {
-    DeploymentRequest leer = new DeploymentRequest(null, null, null, null, null);
+    DeploymentRequest leer = new DeploymentRequest(null, null, null, null, null, null, null);
 
     assertThat(felder(VALIDATOR.validate(leer)))
         .containsExactlyInAnyOrder("attemptId", "outcome", "finishedAt", "revision", "commits");
@@ -201,7 +201,8 @@ class DeploymentIngestControllerTest {
 
   @Test
   void leereKennungUndLeererStandSindUngueltig() {
-    DeploymentRequest leer = new DeploymentRequest(" ", Ausgang.SUCCESS, ENDE, "", List.of());
+    DeploymentRequest leer =
+        new DeploymentRequest(" ", Ausgang.SUCCESS, ENDE, "", List.of(), null, null);
 
     assertThat(felder(VALIDATOR.validate(leer))).containsExactlyInAnyOrder("attemptId", "revision");
   }
@@ -212,14 +213,22 @@ class DeploymentIngestControllerTest {
     String sha = "a".repeat(DeploymentIngestController.SHA_MAX);
     DeploymentRequest grenze =
         new DeploymentRequest(
-            kennung, Ausgang.SUCCESS, ENDE, sha, List.of(new DeploymentCommitRequest(sha, COMMIT)));
+            kennung,
+            Ausgang.SUCCESS,
+            ENDE,
+            sha,
+            List.of(new DeploymentCommitRequest(sha, COMMIT)),
+            null,
+            null);
     DeploymentRequest drueber =
         new DeploymentRequest(
             kennung + "k",
             Ausgang.SUCCESS,
             ENDE,
             sha + "a",
-            List.of(new DeploymentCommitRequest(sha + "a", COMMIT)));
+            List.of(new DeploymentCommitRequest(sha + "a", COMMIT)),
+            null,
+            null);
 
     assertThat(VALIDATOR.validate(grenze)).isEmpty();
     assertThat(felder(VALIDATOR.validate(drueber)))

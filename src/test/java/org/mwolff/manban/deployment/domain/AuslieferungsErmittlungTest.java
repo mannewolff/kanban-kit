@@ -7,11 +7,15 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.IntStream;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.common.Wochenfenster;
 import org.mwolff.manban.deployment.domain.Auslieferungskennzahlen.Woche;
 
-/** Die Rechnung der Platte „Auslieferung“ (Issue #1832, Plan #1831 E6, E8–E11). */
+/**
+ * Die Rechnung der Platte „Auslieferung“ (Issue #1832, Plan #1831 E6, E8–E11); Vorschauen zählen
+ * nicht (Issue #2215, Plan #2206 E10).
+ */
 class AuslieferungsErmittlungTest {
 
   /** Ein Donnerstag. */
@@ -47,9 +51,23 @@ class AuslieferungsErmittlungTest {
       return versuch(Ausgang.FAILURE, finishedAt, gemeldet);
     }
 
+    Lage vorschau(Ausgang ausgang, Instant finishedAt, Commit... gemeldet) {
+      return versuch(Auslieferungsart.VORSCHAU, ausgang, finishedAt, gemeldet);
+    }
+
+    Lage veroeffentlichung(Ausgang ausgang, Instant finishedAt, Commit... gemeldet) {
+      return versuch(Auslieferungsart.VEROEFFENTLICHUNG, ausgang, finishedAt, gemeldet);
+    }
+
     private Lage versuch(Ausgang ausgang, Instant finishedAt, Commit... gemeldet) {
+      return versuch(null, ausgang, finishedAt, gemeldet);
+    }
+
+    private Lage versuch(
+        @Nullable Auslieferungsart art, Ausgang ausgang, Instant finishedAt, Commit... gemeldet) {
       long id = versuche.size() + 1L;
-      versuche.add(new Auslieferungsversuch(id, "lauf-" + id, ausgang, finishedAt, "rev-" + id));
+      versuche.add(
+          new Auslieferungsversuch(id, "lauf-" + id, ausgang, finishedAt, "rev-" + id, art));
       for (Commit c : gemeldet) {
         commits.add(new GemeldeterCommit(id, c.sha(), c.committedAt()));
       }
@@ -392,5 +410,74 @@ class AuslieferungsErmittlungTest {
     Auslieferungskennzahlen k = new Lage().ermittle();
 
     assertThat(k.weeks()).isUnmodifiable();
+  }
+
+  @Test
+  void eineVorschauAendertKeineKennzahl() {
+    Commit frueh = commit("frueh", tageZurueck(5));
+    Auslieferungskennzahlen ohne =
+        new Lage()
+            .erfolg(tageZurueck(4), frueh)
+            .fehlschlag(tageZurueck(3))
+            .erfolg(tageZurueck(2))
+            .ermittle();
+
+    Auslieferungskennzahlen mit =
+        new Lage()
+            .vorschau(Ausgang.FAILURE, tageZurueck(10))
+            .vorschau(Ausgang.SUCCESS, tageZurueck(9), frueh)
+            .erfolg(tageZurueck(4), frueh)
+            .fehlschlag(tageZurueck(3))
+            .vorschau(Ausgang.SUCCESS, vor(Duration.ofHours(60)))
+            .erfolg(tageZurueck(2))
+            .vorschau(Ausgang.FAILURE, vor(Duration.ofHours(1)))
+            .ermittle();
+
+    assertThat(mit).isEqualTo(ohne);
+    assertThat(mit.deploymentCount()).isEqualTo(2);
+    assertThat(mit.outageSince()).isNull();
+    assertThat(mit.leadTimeMedianSeconds()).isEqualTo(TAG);
+  }
+
+  @Test
+  void einCommitAusEinerVorschauZaehltErstMitDerVeroeffentlichung() {
+    Commit c = commit("c", tageZurueck(3));
+
+    Auslieferungskennzahlen k =
+        new Lage()
+            .vorschau(Ausgang.SUCCESS, tageZurueck(2), c)
+            .erfolg(tageZurueck(1), c)
+            .ermittle();
+
+    assertThat(k.deploymentCount()).isEqualTo(1);
+    assertThat(k.leadTimeMedianSeconds()).isEqualTo(2 * TAG);
+    assertThat(k.dataSince()).isEqualTo(tageZurueck(1));
+  }
+
+  @Test
+  void nurVorschauenZaehlenWieKeineMeldung() {
+    Auslieferungskennzahlen k =
+        new Lage().vorschau(Ausgang.SUCCESS, tageZurueck(1)).ermittleVertauscht();
+
+    assertThat(k).isEqualTo(new Lage().ermittle());
+    assertThat(k.hasReports()).isFalse();
+  }
+
+  @Test
+  void eineMeldungOhneArtZaehltWieEineVeroeffentlichung() {
+    Commit c = commit("c", tageZurueck(3));
+
+    Auslieferungskennzahlen ohneArt =
+        new Lage().fehlschlag(tageZurueck(2)).erfolg(tageZurueck(1), c).ermittle();
+    Auslieferungskennzahlen veroeffentlicht =
+        new Lage()
+            .veroeffentlichung(Ausgang.FAILURE, tageZurueck(2))
+            .veroeffentlichung(Ausgang.SUCCESS, tageZurueck(1), c)
+            .ermittle();
+
+    assertThat(veroeffentlicht).isEqualTo(ohneArt);
+    assertThat(ohneArt.deploymentCount()).isEqualTo(1);
+    assertThat(ohneArt.changeFailurePercent()).isEqualTo(50);
+    assertThat(ohneArt.timeToRestoreMedianSeconds()).isEqualTo(TAG);
   }
 }
