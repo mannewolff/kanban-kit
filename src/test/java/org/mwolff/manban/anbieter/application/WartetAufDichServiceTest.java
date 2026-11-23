@@ -122,6 +122,12 @@ class WartetAufDichServiceTest {
   }
 
   @Test
+  void andereLabelsOhneRueckfrageWartenNicht() {
+    // When / Then: ein fremdes und ein Kit-Label anderer Sache sind keine Freigabe (Issue #2236)
+    assertThat(WartetAufDichService.grund(List.of("bug", "kit:clarify"), List.of())).isEmpty();
+  }
+
+  @Test
   void offeneGewoehnlicheRueckfrageGehtVorFreigabe() {
     // When / Then
     assertThat(
