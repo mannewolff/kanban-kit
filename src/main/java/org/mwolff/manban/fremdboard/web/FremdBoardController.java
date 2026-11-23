@@ -13,6 +13,7 @@ import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.web.api.ApiSchemas;
+import org.mwolff.manban.fremdboard.application.FremdBoardStand;
 import org.mwolff.manban.fremdboard.application.VerbindungAnsicht;
 import org.mwolff.manban.fremdboard.application.VerbindungEingabe;
 import org.mwolff.manban.fremdboard.application.VerbindungService;
@@ -28,8 +29,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Board eines Projekts in einem fremden System einrichten und prüfen (Issue #2166, Plan #2152 A2,
- * A13, A18). Nur für den Owner des Projekts; der Zugang steht in keiner Antwort, auch nicht
- * verschlüsselt. Lösen gibt es nicht.
+ * A13, A18). Lesen und Einrichten nur für den Owner, die knappe Auskunft für jedes Mitglied (Issue
+ * #2223, Plan #2221 E1, E7); der Zugang steht in keiner Antwort, auch nicht verschlüsselt. Lösen
+ * gibt es nicht.
  */
 @Tag(name = "Fremdes Board")
 @RestController
@@ -78,6 +80,29 @@ class FremdBoardController {
       @AuthenticationPrincipal Long userId,
       @Parameter(description = PROJEKT_ID, example = "1") @PathVariable long id) {
     return FremdBoardView.aus(service.lesen(userId, id));
+  }
+
+  @Operation(
+      summary = "Ort und Stand des Boards lesen",
+      description =
+          """
+          Sagt jedem Mitglied des Projekts, gleich in welcher Rolle, ob das Board in einem \
+          fremden System liegt, in welchem, von wann der zuletzt bekannte Stand ist und ob der \
+          letzte Abgleich scheiterte. Konto des Kits, Fehlertext, Adresse und Projektpfad stehen \
+          nicht in der Antwort; sie liefert die Abfrage des Owners.""")
+  @ApiResponse(responseCode = "200", description = "Ort und Stand des Boards.")
+  @ApiResponse(
+      responseCode = "404",
+      description = PROJEKT_FEHLT,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @GetMapping("/stand")
+  FremdBoardStandView stand(
+      @AuthenticationPrincipal Long userId,
+      @Parameter(description = PROJEKT_ID, example = "1") @PathVariable long id) {
+    return FremdBoardStandView.aus(service.stand(userId, id));
   }
 
   @Operation(
@@ -204,6 +229,29 @@ class FremdBoardController {
     @Override
     public String toString() {
       return "FremdBoardRequest[" + eingabe() + "]";
+    }
+  }
+
+  /** Die knappe Auskunft für jedes Mitglied — genau vier Felder. */
+  @Schema(description = "Ort und Stand des Boards eines Projekts, für jedes Mitglied.")
+  record FremdBoardStandView(
+      @Schema(description = "true, wenn das Board des Projekts in einem fremden System liegt.")
+          boolean imFremdsystem,
+      @Schema(
+              description = "Das fremde System; leer, wenn das Board in kanban-kit liegt.",
+              example = "GITLAB")
+          @Nullable FremdBoardArt art,
+      @Schema(
+              description =
+                  "Zeitpunkt des zuletzt gelungenen Abgleichs; leer, solange keiner gelang oder"
+                      + " das Board in kanban-kit liegt.")
+          @Nullable Instant standAm,
+      @Schema(description = "true, wenn der letzte Abgleich mit dem fremden System scheiterte.")
+          boolean abgleichGescheitert) {
+
+    static FremdBoardStandView aus(FremdBoardStand stand) {
+      return new FremdBoardStandView(
+          stand.imFremdsystem(), stand.art(), stand.standAm(), stand.abgleichGescheitert());
     }
   }
 

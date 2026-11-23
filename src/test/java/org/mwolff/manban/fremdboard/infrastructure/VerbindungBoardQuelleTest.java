@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.fremdboard.application.FremdBoardStand;
 import org.mwolff.manban.fremdboard.application.VerbindungRepository;
 import org.mwolff.manban.fremdboard.domain.Verbindung;
 
@@ -48,6 +49,11 @@ class VerbindungBoardQuelleTest {
     @Override
     public boolean existiert(long projectId) {
       return projekte.contains(projectId);
+    }
+
+    @Override
+    public Optional<FremdBoardStand> stand(long projectId) {
+      throw new UnsupportedOperationException();
     }
 
     @Override

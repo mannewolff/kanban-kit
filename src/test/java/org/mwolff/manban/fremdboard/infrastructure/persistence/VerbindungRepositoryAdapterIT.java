@@ -14,6 +14,7 @@ import javax.sql.DataSource;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.fremdboard.application.FremdBoardStand;
 import org.mwolff.manban.fremdboard.application.VerbindungRepository;
 import org.mwolff.manban.fremdboard.domain.FremdBoardArt;
 import org.mwolff.manban.fremdboard.domain.StatusLabels;
@@ -278,6 +279,50 @@ class VerbindungRepositoryAdapterIT extends AbstractIntegrationTest {
     verbindungen.speichere(mitAbgleich(projekt, VOLLABGLEICH));
 
     assertThat(standAm(projekt)).isEqualTo(ABGLEICH);
+  }
+
+  @Test
+  void stand_ohneVerbindungIstLeer() {
+    Projekt projekt = projektMitBoard("OhneAuskunft");
+
+    assertThat(verbindungen.stand(projekt.id())).isEmpty();
+  }
+
+  @Test
+  void stand_vorDemErstenAbgleich_ohneZeit() {
+    Projekt projekt = projektMitBoard("AuskunftNeu");
+    verbindungen.speichere(mitAbgleich(projekt, null));
+
+    assertThat(verbindungen.stand(projekt.id()))
+        .contains(new FremdBoardStand(true, FremdBoardArt.GITLAB, null, false));
+  }
+
+  @Test
+  void stand_nenntDieZeitDesGelungenenAbgleichs_undObDerLetzteScheiterte() {
+    Projekt projekt = projektMitBoard("AuskunftStand");
+    verbindungen.speichere(mitAbgleich(projekt, null));
+    verbindungen.beanspruchen(projekt.id(), null, ABGLEICH);
+    verbindungen.abgleichGelungen(projekt.id(), ABGLEICH, ABGLEICH);
+
+    assertThat(verbindungen.stand(projekt.id()))
+        .contains(new FremdBoardStand(true, FremdBoardArt.GITLAB, ABGLEICH, false));
+
+    verbindungen.beanspruchen(projekt.id(), ABGLEICH, VOLLABGLEICH);
+    verbindungen.abgleichGescheitert(projekt.id(), VOLLABGLEICH, ABGLEICH, "nicht erreichbar");
+
+    assertThat(verbindungen.stand(projekt.id()))
+        .contains(new FremdBoardStand(true, FremdBoardArt.GITLAB, ABGLEICH, true));
+  }
+
+  @Test
+  void stand_gescheitertOhneJeGelungenenAbgleich() {
+    Projekt projekt = projektMitBoard("AuskunftNie");
+    verbindungen.speichere(mitAbgleich(projekt, null));
+    verbindungen.beanspruchen(projekt.id(), null, ABGLEICH);
+    verbindungen.abgleichGescheitert(projekt.id(), ABGLEICH, null, "nicht erreichbar");
+
+    assertThat(verbindungen.stand(projekt.id()))
+        .contains(new FremdBoardStand(true, FremdBoardArt.GITLAB, null, true));
   }
 
   private @Nullable Instant standAm(Projekt projekt) {

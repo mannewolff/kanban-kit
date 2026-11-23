@@ -390,6 +390,16 @@ class AbgleichJobTest {
     }
 
     @Override
+    public Optional<FremdBoardStand> stand(long projectId) {
+      Verbindung v = verbindungen.get(projectId);
+      return v == null
+          ? Optional.empty()
+          : Optional.of(
+              new FremdBoardStand(
+                  true, v.art(), standAm.get(projectId), v.letzterFehler() != null));
+    }
+
+    @Override
     public List<Long> faellige(Instant grenze) {
       List<Verbindung> faellig = new ArrayList<>();
       for (Verbindung v : verbindungen.values()) {

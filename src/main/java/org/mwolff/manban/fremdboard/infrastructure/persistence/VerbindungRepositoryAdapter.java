@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.fremdboard.application.FremdBoardStand;
 import org.mwolff.manban.fremdboard.application.VerbindungRepository;
 import org.mwolff.manban.fremdboard.domain.FremdBoardArt;
 import org.mwolff.manban.fremdboard.domain.StatusLabels;
@@ -96,6 +97,23 @@ class VerbindungRepositoryAdapter implements VerbindungRepository {
             "SELECT " + SPALTEN + " FROM fremdboard_verbindung WHERE project_id = :projectId",
             Map.of(PROJECT_ID, projectId),
             (rs, zeile) -> zuVerbindung(rs))
+        .stream()
+        .findFirst();
+  }
+
+  @Override
+  public Optional<FremdBoardStand> stand(long projectId) {
+    return jdbc
+        .query(
+            "SELECT art, stand_am, letzter_fehler IS NOT NULL AS gescheitert"
+                + " FROM fremdboard_verbindung WHERE project_id = :projectId",
+            Map.of(PROJECT_ID, projectId),
+            (rs, zeile) ->
+                new FremdBoardStand(
+                    true,
+                    FremdBoardArt.valueOf(rs.getString("art")),
+                    instant(rs, "stand_am"),
+                    rs.getBoolean("gescheitert")))
         .stream()
         .findFirst();
   }

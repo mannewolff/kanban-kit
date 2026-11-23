@@ -18,6 +18,13 @@ public interface VerbindungRepository {
   /** Die Verbindung des Projekts; leer, wenn das Projekt kein fremdes Board hat. */
   Optional<Verbindung> finde(long projectId);
 
+  /**
+   * Die knappe Auskunft für jedes Mitglied (Issue #2223, Plan #2221 E6): Art, {@code stand_am} und
+   * ob {@code letzter_fehler} gesetzt ist — ohne den verschlüsselten Zugang zu lesen. Leer, wenn
+   * das Projekt kein fremdes Board hat.
+   */
+  Optional<FremdBoardStand> stand(long projectId);
+
   /** Ob das Projekt eine Verbindung hat. */
   boolean existiert(long projectId);
 
