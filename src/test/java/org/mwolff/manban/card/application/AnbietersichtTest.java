@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -169,6 +170,22 @@ class AnbietersichtTest {
     assertThat(sicht.sichtbare(KUNDE, PROJEKT, List.of(b, r, a))).containsExactly(b, a);
     assertThat(sicht.sichtbare(OWNER, PROJEKT, List.of(b, r, a))).containsExactly(b, r, a);
     assertThat(sicht.sichtbare(KUNDE, PROJEKT, List.<Card>of())).isEmpty();
+  }
+
+  @Test
+  void sichtbare_eineLeereListeKommtUnveraendertZurueck_ohneDieLabelsAbzufragen() {
+    List<Card> leer = new ArrayList<>();
+
+    assertThat(sicht.sichtbare(KUNDE, PROJEKT, leer)).isSameAs(leer);
+    verify(cardLabels, never()).kartenMitLabel(anyLong(), anyString());
+  }
+
+  @Test
+  void ohneVerborgene_ohneVerborgeneNummernKommtDieListeUnveraendertZurueck() {
+    List<Card> karten = List.of(karte(1L, NORMAL_NR), karte(2L, REPARATUR_NR));
+
+    assertThat(Anbietersicht.ohneVerborgene(karten, Set.of())).isSameAs(karten);
+    assertThat(sicht.sichtbare(OWNER, PROJEKT, karten)).isSameAs(karten);
   }
 
   @Test
