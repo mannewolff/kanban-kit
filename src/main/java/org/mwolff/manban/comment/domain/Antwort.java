@@ -109,11 +109,12 @@ public record Antwort(
 
   private static Optional<Antwort> ausJson(JsonNode block) {
     JsonNode vorlage = block.path("vorlage");
+    String alsText = vorlage.textValue();
     Long kennung = null;
     if (vorlage.isIntegralNumber() && vorlage.canConvertToLong()) {
       kennung = vorlage.longValue();
-    } else if (vorlage.isTextual() && KENNUNG_ALS_TEXT.matcher(vorlage.asText()).matches()) {
-      kennung = Long.parseLong(vorlage.asText());
+    } else if (alsText != null && KENNUNG_ALS_TEXT.matcher(alsText).matches()) {
+      kennung = Long.parseLong(alsText);
     }
     if (kennung == null) {
       return Optional.empty();
@@ -127,7 +128,7 @@ public record Antwort(
     return Optional.of(
         new Antwort(
             kennung,
-            block.path("ja").isBoolean() && block.path("ja").booleanValue(),
+            block.path("ja").booleanValue(),
             antworten,
             weg.isInt() ? weg.intValue() : null,
             commit.isTextual() && !commit.asText().isBlank() ? commit.asText() : null));
@@ -138,8 +139,7 @@ public record Antwort(
     if (!nr.isInt()) {
       return Optional.empty();
     }
-    JsonNode zurueck = knoten.path(ZURUECKSTELLEN);
-    if (zurueck.isBoolean() && zurueck.booleanValue()) {
+    if (knoten.path(ZURUECKSTELLEN).booleanValue()) {
       return Optional.of(Einzelantwort.zurueckgestellt(nr.intValue()));
     }
     JsonNode wahl = knoten.path(WAHL);

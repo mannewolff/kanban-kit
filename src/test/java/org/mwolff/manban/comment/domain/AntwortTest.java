@@ -70,6 +70,62 @@ class AntwortTest {
   }
 
   @Test
+  void leereZeilenVorDemKopfZaehlenNicht() {
+    // Given
+    String text = "\n  \n## Antwort\n```json kit-antwort\n{\"vorlage\": 3}\n```";
+
+    // When / Then
+    assertThat(Antwort.lies(text)).map(Antwort::vorlage).contains(3L);
+  }
+
+  @Test
+  void leererOderNurLeerraumTextIstKeineAntwort() {
+    assertThat(Antwort.lies("")).isEmpty();
+    assertThat(Antwort.lies("\n  \n\t")).isEmpty();
+  }
+
+  @Test
+  void kennungOhneGanzeZahlImLongBereichIstKeineAntwort() {
+    assertThat(Antwort.lies("## Antwort\n```json kit-antwort\n{\"vorlage\": 9.5}\n```")).isEmpty();
+    assertThat(
+            Antwort.lies(
+                "## Antwort\n```json kit-antwort\n{\"vorlage\": 99999999999999999999}\n```"))
+        .isEmpty();
+  }
+
+  @Test
+  void felderMitFalschemTypFallenWeg() {
+    // Given
+    String text =
+        """
+        ## Antwort
+        ```json kit-antwort
+        {"vorlage": 4, "ja": "true", "commit": 5, "weg": "2",
+         "antworten": [{"nr": 1, "text": 5}, {"nr": 2, "zurueckstellen": "true"},
+                       {"nr": 3, "zurueckstellen": 1, "wahl": 2}]}
+        ```
+        """;
+
+    // When
+    Antwort antwort = Antwort.lies(text).orElseThrow();
+
+    // Then
+    assertThat(antwort.ja()).isFalse();
+    assertThat(antwort.commit()).isNull();
+    assertThat(antwort.weg()).isNull();
+    assertThat(antwort.antworten()).containsExactly(Einzelantwort.gewaehlt(3, 2));
+  }
+
+  @Test
+  void leererCommitFehlt() {
+    // Given
+    String text = "## Antwort\n```json kit-antwort\n{\"vorlage\": 4, \"commit\": \"  \"}\n```";
+
+    // When / Then
+    assertThat(Antwort.lies(text).orElseThrow().commit()).isNull();
+  }
+
+  @Test
   void schreibtDeutschenKopfUndBlock() {
     // Given
     Antwort antwort =
