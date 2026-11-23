@@ -347,6 +347,19 @@ class RueckfragenAuswertungTest {
   }
 
   @Test
+  void feldWegBeantwortetKeineGewoehnlicheFrage() {
+    // Given: Fragen 1 und 3 bieten eine Möglichkeit 1 an, sind aber keine Wege
+    Antwort wegEins = new Antwort(9L, false, List.of(), 1, null);
+
+    // When
+    Stand stand = auswerten(rueckfrage(), null, vomKunden(wegEins, SPAETER));
+
+    // Then
+    assertThat(stand.fragen())
+        .containsExactly(FrageStand.offen(1), FrageStand.offen(2), FrageStand.offen(3));
+  }
+
+  @Test
   void englischeKoepfeWerdenGelesenUndGeschrieben() {
     // Given
     Rueckfrage question = Rueckfrage.lies(9L, FRAGE_AM, "## Question\n" + BLOCK).orElseThrow();
