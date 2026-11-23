@@ -283,6 +283,10 @@ describe('kitWortformen — Abschnitt Köpfe der Rückfragen (Issue #2217)', () 
     expect(traegtKopf(KOEPFE.antwort, '## Answer\r\nmehr')).toBe(true)
   })
 
+  it('überspringt eine Zeile aus Leerraum vor dem Kopf (Issue #2243)', () => {
+    expect(traegtKopf(KOEPFE.antwort, '   \n## Antwort')).toBe(true)
+  })
+
   it('verlangt den Kopf allein auf der ersten nichtleeren Zeile', () => {
     expect(traegtKopf(KOEPFE.antwort, 'Vorweg\n## Antwort')).toBe(false)
     expect(traegtKopf(KOEPFE.antwort, '## Antworten')).toBe(false)
