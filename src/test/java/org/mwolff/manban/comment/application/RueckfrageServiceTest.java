@@ -29,6 +29,8 @@ import org.mwolff.manban.comment.application.RueckfrageService.EinzelAuftrag;
 import org.mwolff.manban.comment.application.RueckfrageService.OptionView;
 import org.mwolff.manban.comment.application.RueckfrageService.RueckfrageView;
 import org.mwolff.manban.comment.domain.Antwort;
+import org.mwolff.manban.comment.domain.Antwort.Einzelantwort;
+import org.mwolff.manban.comment.domain.Kopfsprache;
 import org.mwolff.manban.comment.domain.Rueckfrage.Art;
 import org.mwolff.manban.comment.domain.RueckfragenAuswertung.FrageZustand;
 import org.mwolff.manban.comment.domain.RueckfragenAuswertung.RueckfrageZustand;
@@ -435,6 +437,45 @@ class RueckfrageServiceTest {
                         false, List.of(new EinzelAuftrag(2, null, lang, null)), null, false)))
         .isInstanceOf(UngueltigeAntwortException.class)
         .hasMessage("Die Antwort ist zu lang");
+  }
+
+  @Test
+  void antwortGenauSoLangWieErlaubtWirdGeschrieben() {
+    // Given (Issue #2228) — ein eigener Text, mit dem der Kommentar genau MAX_TEXT Zeichen hat
+    rueckfrageAnDerKarte("## Rückfrage\n");
+    int mitEinemZeichen =
+        new Antwort(RUECKFRAGE_ID, false, List.of(Einzelantwort.eigene(2, "x")), null, null)
+            .alsKommentar(Kopfsprache.DEUTSCH)
+            .length();
+    String text = "x".repeat(TextLimits.MAX_TEXT - mitEinemZeichen + 1);
+
+    // When
+    RueckfrageView view =
+        service.antworten(
+            USER,
+            CARD,
+            RUECKFRAGE_ID,
+            new AntwortAuftrag(
+                false, List.of(new EinzelAuftrag(2, null, text, null)), null, false));
+
+    // Then
+    assertThat(ankarte.getLast().body()).hasSize(TextLimits.MAX_TEXT);
+    assertThat(view.kommentarId()).isEqualTo(RUECKFRAGE_ID);
+  }
+
+  @Test
+  void freigabeAlleinIstEineAngabe() {
+    // Given (Issue #2228) — weder ja noch Einzelantworten noch Weg, nur die Freigabe
+    rueckfrageAnDerKarte("## Rückfrage\nVorschau: https://p\nCommit: abc\n");
+    when(vorschauen.juengste(PROJECT)).thenReturn(Optional.of(new Vorschau(SPAETER, "abc")));
+
+    // When
+    service.antworten(USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(false, List.of(), null, true));
+
+    // Then
+    Antwort antwort = Antwort.lies(ankarte.getLast().body()).orElseThrow();
+    assertThat(antwort.ja()).isFalse();
+    assertThat(antwort.commit()).isEqualTo("abc");
   }
 
   @Test
