@@ -2,7 +2,9 @@ import { apiFetch } from './client'
 
 /**
  * Board eines Projekts in einem fremden System (Issue #2169; Endpunkt aus Issue #2166, Plan #2152
- * A2, A13, A18). Nur für den Owner des Projekts.
+ * A2, A13, A18). `lies` und `speichere` gelten nur für den Owner des Projekts; `stand` (Issue #2224,
+ * Plan #2221 E1, E2) gilt für jedes Mitglied und nennt nur, ob das Board im fremden System liegt, von
+ * wann der Stand ist und ob der letzte Abgleich gescheitert ist.
  *
  * Der Zugang geht nur hinaus, nie herein: Keine Antwort enthält ihn, auch nicht verschlüsselt.
  * Fehlende Angaben kommen als `null`. Fehler wirft {@link apiFetch} als
@@ -46,6 +48,17 @@ export interface FremdBoardAnsicht {
 }
 
 /**
+ * Die knappe Auskunft für jedes Mitglied — ohne Konto des Kits, Fehlertext, Adresse oder Zugang.
+ * `standAm` ist leer, solange nach dem Anbinden noch kein Abgleich gelungen ist.
+ */
+export interface FremdBoardStand {
+  imFremdsystem: boolean
+  art: FremdBoardArt | null
+  standAm: string | null
+  abgleichGescheitert: boolean
+}
+
+/**
  * Was der Owner angibt. `zugang` ist beim ersten Anbinden Pflicht; danach ersetzt er den alten, und
  * ohne ihn (`null`) bleibt der alte.
  */
@@ -67,6 +80,7 @@ export const fremdBoardApi = {
       method: 'PUT',
       body: JSON.stringify(eingabe),
     }),
+  stand: (projectId: number) => apiFetch<FremdBoardStand>(`${pfad(projectId)}/stand`),
 }
 
 export type FremdBoardApi = typeof fremdBoardApi
