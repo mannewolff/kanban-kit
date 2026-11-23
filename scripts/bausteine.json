@@ -53,10 +53,10 @@
       "name": "Reverse-Proxy",
       "zweck": "Caddy mit automatischem TLS vor der Anwendung (docker-compose.yml)",
       "art": "abbild",
-      "bezugsstelle": "caddy:2.11.7",
-      "fassung": "2.11.7",
+      "bezugsstelle": "caddy:2.11.9",
+      "fassung": "2.11.9",
       "pruefung": "bezug",
-      "digest": "sha256:685ae3d7c34d9b5f8caeddc5d14051db7bbd88ff1f5a2fa0c16bd8ca328fb7af",
+      "digest": "sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b",
       "ausgeliefert": true
     },
     {
