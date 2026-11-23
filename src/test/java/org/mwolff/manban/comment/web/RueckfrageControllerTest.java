@@ -52,7 +52,8 @@ class RueckfrageControllerTest {
                 new EinzelAuftrag(2, null, "eigene", null),
                 new EinzelAuftrag(3, null, null, true)),
             1,
-            true);
+            true,
+            "abc");
     when(service.antworten(3L, 5L, 40L, auftrag)).thenReturn(view);
     RueckfrageController.AntwortRequest request =
         new RueckfrageController.AntwortRequest(
@@ -62,7 +63,8 @@ class RueckfrageControllerTest {
                 new RueckfrageController.EinzelantwortRequest(2, null, "eigene", null),
                 new RueckfrageController.EinzelantwortRequest(3, null, null, true)),
             1,
-            true);
+            true,
+            "abc");
 
     // When / Then
     assertThat(controller.antworten(3L, 5L, 40L, request)).isSameAs(view);
@@ -72,13 +74,13 @@ class RueckfrageControllerTest {
   void antworten_fehlendeSchalterSindAus() {
     // Given
     RueckfrageView view = view();
-    when(service.antworten(3L, 5L, 40L, new AntwortAuftrag(false, List.of(), null, false)))
+    when(service.antworten(3L, 5L, 40L, new AntwortAuftrag(false, List.of(), null, false, null)))
         .thenReturn(view);
 
     // When / Then
     assertThat(
             controller.antworten(
-                3L, 5L, 40L, new RueckfrageController.AntwortRequest(null, null, null, null)))
+                3L, 5L, 40L, new RueckfrageController.AntwortRequest(null, null, null, null, null)))
         .isSameAs(view);
   }
 }

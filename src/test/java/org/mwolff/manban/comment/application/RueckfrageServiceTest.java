@@ -106,7 +106,7 @@ class RueckfrageServiceTest {
   }
 
   private static AntwortAuftrag allesUebernehmen() {
-    return new AntwortAuftrag(true, List.of(), null, false);
+    return new AntwortAuftrag(true, List.of(), null, false, null);
   }
 
   @Test
@@ -206,7 +206,8 @@ class RueckfrageServiceTest {
                 new EinzelAuftrag(2, null, "eigene", false),
                 new EinzelAuftrag(3, null, null, true)),
             null,
-            false);
+            false,
+            null);
 
     // When
     RueckfrageView view = service.antworten(USER, CARD, RUECKFRAGE_ID, auftrag);
@@ -230,7 +231,7 @@ class RueckfrageServiceTest {
     // When
     RueckfrageView view =
         service.antworten(
-            USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(true, List.of(), null, true));
+            USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(true, List.of(), null, true, "abc"));
 
     // Then
     assertThat(Antwort.lies(ankarte.getLast().body()).orElseThrow().commit()).isEqualTo("abc");
@@ -247,7 +248,10 @@ class RueckfrageServiceTest {
     assertThatThrownBy(
             () ->
                 service.antworten(
-                    USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(true, List.of(), null, true)))
+                    USER,
+                    CARD,
+                    RUECKFRAGE_ID,
+                    new AntwortAuftrag(true, List.of(), null, true, "abc")))
         .isInstanceOf(RueckfrageUeberholtException.class);
     verify(comments, never()).create(anyLong(), anyLong(), anyString());
     assertThat(service.liste(USER, CARD).getFirst().zustand())
@@ -276,7 +280,10 @@ class RueckfrageServiceTest {
     assertThatThrownBy(
             () ->
                 service.antworten(
-                    USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(true, List.of(), null, true)))
+                    USER,
+                    CARD,
+                    RUECKFRAGE_ID,
+                    new AntwortAuftrag(true, List.of(), null, true, "abc")))
         .isInstanceOf(UngueltigeAntwortException.class)
         .hasMessage("Diese Rückfrage fragt nach keiner Freigabe");
   }
@@ -382,7 +389,7 @@ class RueckfrageServiceTest {
   }
 
   private void assertUngueltig(EinzelAuftrag einzel, String meldung) {
-    AntwortAuftrag auftrag = new AntwortAuftrag(false, List.of(einzel), null, false);
+    AntwortAuftrag auftrag = new AntwortAuftrag(false, List.of(einzel), null, false, null);
     assertThatThrownBy(() -> service.antworten(USER, CARD, RUECKFRAGE_ID, auftrag))
         .isInstanceOf(UngueltigeAntwortException.class)
         .hasMessage(meldung);
@@ -397,7 +404,10 @@ class RueckfrageServiceTest {
     assertThatThrownBy(
             () ->
                 service.antworten(
-                    USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(false, List.of(), 1, false)))
+                    USER,
+                    CARD,
+                    RUECKFRAGE_ID,
+                    new AntwortAuftrag(false, List.of(), 1, false, null)))
         .isInstanceOf(UngueltigeAntwortException.class)
         .hasMessage("Die Rückfrage bietet diesen Weg nicht an");
   }
@@ -421,7 +431,7 @@ class RueckfrageServiceTest {
     // When
     RueckfrageView view =
         service.antworten(
-            USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(false, List.of(), 2, false));
+            USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(false, List.of(), 2, false, null));
 
     // Then
     assertThat(view.zustand()).isEqualTo(RueckfrageZustand.BEANTWORTET);
@@ -429,12 +439,18 @@ class RueckfrageServiceTest {
     assertThatThrownBy(
             () ->
                 service.antworten(
-                    USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(false, List.of(), 3, false)))
+                    USER,
+                    CARD,
+                    RUECKFRAGE_ID,
+                    new AntwortAuftrag(false, List.of(), 3, false, null)))
         .isInstanceOf(UngueltigeAntwortException.class);
     assertThatThrownBy(
             () ->
                 service.antworten(
-                    USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(false, List.of(), 0, false)))
+                    USER,
+                    CARD,
+                    RUECKFRAGE_ID,
+                    new AntwortAuftrag(false, List.of(), 0, false, null)))
         .isInstanceOf(UngueltigeAntwortException.class);
   }
 
@@ -452,7 +468,7 @@ class RueckfrageServiceTest {
                     CARD,
                     RUECKFRAGE_ID,
                     new AntwortAuftrag(
-                        false, List.of(new EinzelAuftrag(2, null, lang, null)), null, false)))
+                        false, List.of(new EinzelAuftrag(2, null, lang, null)), null, false, null)))
         .isInstanceOf(UngueltigeAntwortException.class)
         .hasMessage("Die Antwort ist zu lang");
   }
@@ -474,7 +490,7 @@ class RueckfrageServiceTest {
             CARD,
             RUECKFRAGE_ID,
             new AntwortAuftrag(
-                false, List.of(new EinzelAuftrag(2, null, text, null)), null, false));
+                false, List.of(new EinzelAuftrag(2, null, text, null)), null, false, null));
 
     // Then
     assertThat(ankarte.getLast().body()).hasSize(TextLimits.MAX_TEXT);
@@ -488,7 +504,8 @@ class RueckfrageServiceTest {
     when(vorschauen.juengste(PROJECT)).thenReturn(Optional.of(new Vorschau(SPAETER, "abc")));
 
     // When
-    service.antworten(USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(false, List.of(), null, true));
+    service.antworten(
+        USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(false, List.of(), null, true, "abc"));
 
     // Then
     Antwort antwort = Antwort.lies(ankarte.getLast().body()).orElseThrow();
@@ -503,7 +520,8 @@ class RueckfrageServiceTest {
 
     // When
     RueckfrageView view =
-        service.antworten(USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(true, null, null, false));
+        service.antworten(
+            USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(true, null, null, false, null));
 
     // Then
     assertThat(view.zustand()).isEqualTo(RueckfrageZustand.BEANTWORTET);
@@ -519,7 +537,7 @@ class RueckfrageServiceTest {
     assertThatThrownBy(
             () ->
                 service.antworten(
-                    USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(false, null, null, false)))
+                    USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(false, null, null, false, null)))
         .isInstanceOf(UngueltigeAntwortException.class)
         .hasMessage("Die Antwort enthält keine Angabe");
   }

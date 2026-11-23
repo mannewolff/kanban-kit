@@ -239,7 +239,7 @@ describe('RueckfrageKarte', () => {
 
       await userEvent.click(screen.getByRole('button', { name: 'Veröffentlichen freigeben' }))
 
-      expect(api.antworten).toHaveBeenCalledWith(100, 55, { ja: true, freigeben: true })
+      expect(api.antworten).toHaveBeenCalledWith(100, 55, { ja: true, freigeben: true, commit: 'abc1234' })
       expect(await screen.findByText('Freigabe erteilt, wird veröffentlicht')).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Veröffentlichen freigeben' })).not.toBeInTheDocument()
       expect(screen.queryByText('Antwort übermittelt, die KI arbeitet daran')).not.toBeInTheDocument()

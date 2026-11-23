@@ -313,7 +313,7 @@ export function RueckfrageKarte({
             ueberholt={ueberholt}
             zuletzt={zuletzt}
             gesperrt={gesperrtJetzt}
-            onFreigeben={() => void antworte({ ja: true, freigeben: true })}
+            onFreigeben={() => void antworte({ ja: true, freigeben: true, commit: stand.commit })}
           />
         )}
         {uebermittelt && !istFreigabe && <Typography variant="body2">{t.UEBERMITTELT}</Typography>}

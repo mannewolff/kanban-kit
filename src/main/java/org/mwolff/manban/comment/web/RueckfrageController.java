@@ -75,7 +75,8 @@ class RueckfrageController {
           "Schreibt die Antwort als Kommentar mit dem Kopf „Antwort“ (in der Sprache der"
               + " Rückfrage) an die Karte und liefert den Stand der Rückfrage danach. ja"
               + " übernimmt alle Empfehlungen, antworten nennt Abweichungen oder einzelne"
-              + " Antworten, freigeben gibt den Stand einer Freigabe-Rückfrage frei.")
+              + " Antworten, freigeben gibt den Stand einer Freigabe-Rückfrage frei; commit nennt"
+              + " dabei den angezeigten Stand.")
   @ApiResponse(responseCode = "201", description = "Der Stand der Rückfrage nach der Antwort.")
   @ApiResponse(
       responseCode = "400",
@@ -109,7 +110,8 @@ class RueckfrageController {
       responseCode = "409",
       description =
           "freigeben an einer überholten Rückfrage: Für das Projekt ist eine neuere Vorschau"
-              + " gemeldet.",
+              + " gemeldet, oder commit ist nicht der Stand, den die Rückfrage zur Freigabe"
+              + " stellt.",
       content =
           @Content(
               mediaType = ApiSchemas.PROBLEM_JSON,
@@ -139,7 +141,8 @@ class RueckfrageController {
             Boolean.TRUE.equals(request.ja()),
             antworten,
             request.weg(),
-            Boolean.TRUE.equals(request.freigeben())));
+            Boolean.TRUE.equals(request.freigeben()),
+            request.commit()));
   }
 
   @Schema(description = "Die Antwort auf eine Rückfrage.")
@@ -150,7 +153,14 @@ class RueckfrageController {
           @Nullable List<@NotNull @Valid EinzelantwortRequest> antworten,
       @Schema(description = "Nummer des gewählten Wegs.", example = "1") @Nullable Integer weg,
       @Schema(description = "Den Stand einer Freigabe-Rückfrage freigeben.")
-          @Nullable Boolean freigeben) {}
+          @Nullable Boolean freigeben,
+      @Schema(
+              description =
+                  "Der angezeigte Stand, den freigeben bestätigt; muss der commit der Rückfrage"
+                      + " sein.",
+              example = "3f2a9c1")
+          @Size(max = TextLimits.MAX_TEXT)
+          @Nullable String commit) {}
 
   @Schema(
       description = "Die Antwort auf eine Frage: genau eines von wahl, text und zurueckstellen.")

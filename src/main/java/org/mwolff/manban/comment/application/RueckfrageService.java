@@ -35,7 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Kommentar über {@link CommentService#create(long, long, String)} an die Karte und durchläuft
  * damit dessen Prüfungen, auch die Sperre für Antworten über einen gewöhnlichen Zugang (E7). Ihr
  * Kopf folgt der Sprache der Rückfrage (E9). Freigeben an einer überholten Rückfrage endet mit 409
- * (E11).
+ * (E11), ebenso Freigeben eines anderen als des angezeigten Stands (Issue #2253).
  */
 @Service
 public class RueckfrageService {
@@ -103,6 +103,8 @@ public class RueckfrageService {
    *     in einem fremden System liegt
    * @throws CommentNotFoundException wenn an der Karte keine Rückfrage mit dieser Kennung steht
    * @throws RueckfrageUeberholtException bei {@code freigeben} an einer überholten Rückfrage
+   * @throws FreigabeStandAbweichendException bei {@code freigeben}, wenn der angezeigte Stand nicht
+   *     der der Rückfrage ist
    * @throws UngueltigeAntwortException wenn die Antwort nicht zur Rückfrage passt
    */
   @Transactional
@@ -173,12 +175,15 @@ public class RueckfrageService {
    * @param antworten die Einzelantworten; {@code null} wie leer
    * @param weg Nummer des gewählten Wegs; {@code null} ohne
    * @param freigeben ob der Stand der Rückfrage freigegeben wird
+   * @param commit der Stand, den der Mensch angezeigt bekam und mit {@code freigeben} bestätigt;
+   *     weicht er vom Stand der Rückfrage ab, endet die Freigabe mit 409 (Issue #2253)
    */
   public record AntwortAuftrag(
       boolean ja,
       @Nullable List<EinzelAuftrag> antworten,
       @Nullable Integer weg,
-      boolean freigeben) {
+      boolean freigeben,
+      @Nullable String commit) {
 
     List<EinzelAuftrag> antwortenOderLeer() {
       return antworten == null ? List.of() : antworten;

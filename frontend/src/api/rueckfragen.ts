@@ -64,6 +64,8 @@ export interface AntwortAuftrag {
   weg?: number
   /** Den Stand einer Freigabe-Rückfrage freigeben. */
   freigeben?: boolean
+  /** Der angezeigte Stand, den `freigeben` bestätigt; weicht er ab, antwortet der Server mit 409 (Issue #2253). */
+  commit?: string | null
 }
 
 export const rueckfragenApi = {
