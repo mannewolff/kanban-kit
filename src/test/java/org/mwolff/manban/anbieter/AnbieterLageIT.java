@@ -11,19 +11,22 @@ import jakarta.servlet.http.Cookie;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Duration;
-import java.time.Instant;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.StellbareUhrConfig;
 import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
+import org.mwolff.manban.ratelimit.MutableClock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -33,9 +36,16 @@ import org.springframework.test.web.servlet.MockMvc;
  * gebunden — hat die Karten zuletzt vor 10 Minuten gelesen; der Kunde sieht „gerade nicht
  * erreichbar“. Nach dem nächsten Lesen mit diesem Zugang ist der Hinweis weg. Der frisch benutzte
  * gewöhnliche Zugang eines Mitglieds nimmt den Hinweis nicht weg.
+ *
+ * <p>Die Zeit steuert die stellbare Uhr ({@link StellbareUhrConfig}), wie in {@code
+ * AccessTokenLastUsedThrottleIT}: Die Drosselung des Nutzungsstempels liegt im Arbeitsspeicher des
+ * geteilten Spring-Kontexts und überlebt das {@code TRUNCATE} der Basisklasse, während die
+ * Token-IDs wieder bei 1 beginnen. Ohne das Weiterstellen träfe das Lesen des Rechenzentrums auf
+ * den Stempel eines Zugangs aus einem früheren Test und würde nicht gestempelt (Issue #2252).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
+@Import(StellbareUhrConfig.class)
 class AnbieterLageIT extends AbstractIntegrationTest {
 
   private static final String JSON = "application/json";
@@ -50,6 +60,12 @@ class AnbieterLageIT extends AbstractIntegrationTest {
   @Autowired private AppUserRepository users;
   @Autowired private ProjectMembershipRepository memberships;
   @Autowired private JdbcTemplate jdbc;
+  @Autowired private MutableClock clock;
+
+  @BeforeEach
+  void letTheThrottleForgetPreviousTests() {
+    clock.advance(Duration.ofMinutes(10));
+  }
 
   @Test
   @DisplayName("Szenario: Das Rechenzentrum ist nicht erreichbar")
@@ -88,7 +104,7 @@ class AnbieterLageIT extends AbstractIntegrationTest {
     // und das Mitglied hat mit seinem gewöhnlichen Zugang gerade gelesen.
     jdbc.update(
         "update kanban_access_token set last_used_at = ? where id = ?",
-        Timestamp.from(Instant.now().minus(Duration.ofMinutes(10))),
+        Timestamp.from(clock.instant().minus(Duration.ofMinutes(10))),
         rechenzentrum.get("id").asLong());
     lesen(zugangDesMitglieds);
 
@@ -114,7 +130,7 @@ class AnbieterLageIT extends AbstractIntegrationTest {
   private void mitgliedMitRolle(long projekt, String email, ProjectRole rolle) {
     memberships.save(
         new ProjectMembership(
-            null, projekt, users.findByEmail(email).orElseThrow().id(), rolle, Instant.now()));
+            null, projekt, users.findByEmail(email).orElseThrow().id(), rolle, clock.instant()));
   }
 
   /** Ein gewöhnlicher, an das Board gebundener Zugang. */
