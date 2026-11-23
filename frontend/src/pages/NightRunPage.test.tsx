@@ -7615,16 +7615,22 @@ describe('NightRunPage — Gleichzeitigkeit in der Einlieferung (#1878)', () => 
     expect('checkWaitMs' in gesendet.runs[0].items[1]).toBe(false)
   })
 
-  it('traegt ohne mehrere Plaetze keinen der drei Schluessel', async () => {
-    const NACHEINANDER = stand({ einheiten: [einheit({ ausgang: 'erfolg', pruefung: GEPRUEFT, gleichzeitig: true })] })
+  it('traegt ohne mehrere Plaetze nur an einer Einheit mit gleichzeitig die drei Schluessel (Issue #2255)', async () => {
+    const NACHEINANDER = stand({
+      einheiten: [
+        einheit({ id: '730', ausgang: 'erfolg', pruefung: GEPRUEFT, gleichzeitig: true, pruefWartezeitMs: 5000 }),
+        einheit({ id: '731', ausgang: 'erfolg', pruefung: GEPRUEFT }),
+      ],
+    })
     renderPage({ submit: { ergebnis: alleNeu(NACHEINANDER) } })
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
     protokollWaehlen(NACHEINANDER)
 
     await waitFor(() => expect(anfragen.some((a) => a.method === 'POST')).toBe(true))
-    const [paket] = JSON.parse(anfragen.find((a) => a.method === 'POST')!.body).runs[0].items
-    expect(['concurrent', 'checkWaitMs', 'deferredAtMerge'].filter((feld) => feld in paket)).toEqual([])
+    const [mit, ohne] = JSON.parse(anfragen.find((a) => a.method === 'POST')!.body).runs[0].items
+    expect(mit).toMatchObject({ concurrent: true, checkWaitMs: 5000, deferredAtMerge: false })
+    expect(['concurrent', 'checkWaitMs', 'deferredAtMerge'].filter((feld) => feld in ohne)).toEqual([])
   })
 })
 
