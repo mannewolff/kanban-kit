@@ -97,6 +97,85 @@ describe('useProjectRole', () => {
     expect(result.current.canModerate).toBe(false)
   })
 
+  it('nimmt die Mitgliedschaft des angefragten Projekts, nicht die erste (Issue #2244)', () => {
+    authUser.value = {
+      platformRole: 'USER',
+      memberships: [
+        { projectId: 4, role: 'OWNER' },
+        { projectId: 5, role: 'VIEWER' },
+      ],
+    }
+    const { result } = renderHook(() => useProjectRole(5))
+    expect(result.current.effectiveRole).toBe('VIEWER')
+    expect(result.current.canEdit).toBe(false)
+  })
+
+  it('übernimmt ohne Projekt keine Rolle, auch nicht aus einer Mitgliedschaft ohne Projektnummer (Issue #2244)', () => {
+    authUser.value = { platformRole: 'USER', memberships: [{ projectId: null, role: 'OWNER' }] }
+    const { result } = renderHook(() => useProjectRole(null))
+    expect(result.current.effectiveRole).toBe('VIEWER')
+    expect(result.current.canEdit).toBe(false)
+  })
+
+  it('lädt ohne angemeldeten Nutzer die Rolle nach, ohne zu werfen (Issue #2244)', async () => {
+    authUser.value = null
+    mList.mockResolvedValue([project(5, 'MEMBER')])
+    const { result } = renderHook(() => useProjectRole(5))
+    await waitFor(() => expect(result.current.effectiveRole).toBe('MEMBER'))
+  })
+
+  it('übernimmt nach der Rückkehr zum Projekt keine verspätete Antwort des ersten Aufrufs (Issue #2244)', async () => {
+    let resolveFirst: (projects: Project[]) => void = () => {}
+    mList.mockImplementationOnce(() => new Promise<Project[]>((resolve) => { resolveFirst = resolve }))
+    mList.mockResolvedValueOnce([project(6, 'VIEWER')])
+    mList.mockResolvedValueOnce([project(5, 'MEMBER')])
+    const { result, rerender } = renderHook(({ id }: { id: number | null }) => useProjectRole(id), {
+      initialProps: { id: 5 as number | null },
+    })
+    rerender({ id: 6 })
+    rerender({ id: 5 })
+    await waitFor(() => expect(result.current.effectiveRole).toBe('MEMBER'))
+
+    await act(async () => { resolveFirst([project(5, 'OWNER')]) })
+
+    expect(result.current.effectiveRole).toBe('MEMBER')
+    expect(result.current.canModerate).toBe(false)
+  })
+
+  it('übernimmt nach der Rückkehr zum Projekt keinen verspäteten Ladefehler des ersten Aufrufs (Issue #2244)', async () => {
+    let rejectFirst: (error: Error) => void = () => {}
+    mList.mockImplementationOnce(() => new Promise<Project[]>((_, reject) => { rejectFirst = reject }))
+    mList.mockResolvedValueOnce([project(6, 'VIEWER')])
+    mList.mockResolvedValueOnce([project(5, 'OWNER')])
+    const { result, rerender } = renderHook(({ id }: { id: number | null }) => useProjectRole(id), {
+      initialProps: { id: 5 as number | null },
+    })
+    rerender({ id: 6 })
+    rerender({ id: 5 })
+    await waitFor(() => expect(result.current.effectiveRole).toBe('OWNER'))
+
+    await act(async () => { rejectFirst(new Error('Netzwerkfehler')) })
+
+    expect(result.current.effectiveRole).toBe('OWNER')
+  })
+
+  it('behält nach einem Ladefehler keine zuvor nachgeladene Rolle (Issue #2244)', async () => {
+    mList.mockResolvedValueOnce([project(5, 'OWNER')])
+    const { result, rerender } = renderHook(() => useProjectRole(5))
+    await waitFor(() => expect(result.current.effectiveRole).toBe('OWNER'))
+
+    authUser.value = { platformRole: 'USER', memberships: [{ projectId: 5, role: 'MEMBER' }] }
+    rerender()
+    expect(result.current.effectiveRole).toBe('MEMBER')
+
+    mList.mockRejectedValueOnce(new Error('Netzwerkfehler'))
+    authUser.value = { platformRole: 'USER', memberships: [] }
+    rerender()
+    await waitFor(() => expect(mList).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(result.current.effectiveRole).toBe('VIEWER'))
+    expect(result.current.canEdit).toBe(false)
+  })
+
   it('gibt einem Plattform-Admin ohne Mitgliedschaft volle Rechte', () => {
     authUser.value = { platformRole: 'ADMIN', memberships: [] }
     const { result } = renderHook(() => useProjectRole(null))

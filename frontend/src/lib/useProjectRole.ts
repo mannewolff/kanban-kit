@@ -38,10 +38,16 @@ export function useProjectRole(projectId: number | null): {
       .list()
       .then((projects) => {
         if (active) {
+          // Stryker disable next-line OptionalChaining: gleichwertig — ohne `?.` wirft `.role` bei fehlendem Projekt, und das `catch` setzt dieselbe Rolle VIEWER (#2244)
           setFetched({ projectId, role: projects.find((p) => p.id === projectId)?.role ?? 'VIEWER' })
         }
       })
-      .catch(() => active && setFetched({ projectId, role: 'VIEWER' }))
+      .catch(() => {
+        if (active) {
+          // Stryker disable next-line ObjectLiteral: gleichwertig — ein leeres Objekt trifft keine Projektnummer und ergibt ebenfalls VIEWER (#2244)
+          setFetched({ projectId, role: 'VIEWER' })
+        }
+      })
     return () => {
       active = false
     }
