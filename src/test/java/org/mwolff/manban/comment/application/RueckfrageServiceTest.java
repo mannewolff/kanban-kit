@@ -294,6 +294,24 @@ class RueckfrageServiceTest {
   }
 
   @Test
+  void antwortGiltDerRueckfrageMitDerGenanntenKennung() {
+    // Given — zwei Rückfragen an der Karte
+    rueckfrageAnDerKarte("## Rückfrage\n");
+    ankarte.add(kommentar(42L, "## Rückfrage\n" + DREI_FRAGEN, FRAGE_AM, "STANDARD", true));
+
+    // When / Then — eine fremde Kennung trifft keine der beiden
+    assertThatThrownBy(() -> service.antworten(USER, CARD, 99L, allesUebernehmen()))
+        .isInstanceOf(CommentNotFoundException.class);
+
+    // When — die zweite wird beantwortet
+    RueckfrageView nachher = service.antworten(USER, CARD, 42L, allesUebernehmen());
+
+    // Then
+    assertThat(nachher.kommentarId()).isEqualTo(42L);
+    assertThat(Antwort.lies(ankarte.getLast().body()).orElseThrow().vorlage()).isEqualTo(42L);
+  }
+
+  @Test
   void ohneSchreibrechtWirdNichtsGelesenUndNichtsGeschrieben() {
     // Given
     rueckfrageAnDerKarte("## Rückfrage\n");
