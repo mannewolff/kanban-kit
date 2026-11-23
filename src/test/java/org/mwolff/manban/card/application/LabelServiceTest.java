@@ -533,6 +533,20 @@ class LabelServiceTest {
     verify(cardLabels, never()).addLabel(anyLong(), anyLong());
   }
 
+  /**
+   * Eine dem Aufrufer verborgene Karte bekommt kein Label, sie gilt als unbekannt (Issue #2232).
+   */
+  @Test
+  void addToCard_lehntVerborgeneKarteAb() {
+    givenCard(CardType.CARD);
+    givenBoardLabel(1L, "Bug");
+    doThrow(new CardNotFoundException()).when(grundlage).pruefeSichtbar(USER, card(CardType.CARD));
+
+    assertThatThrownBy(() -> service.addToCard(USER, CARD_ID, "Bug"))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cardLabels, never()).addLabel(anyLong(), anyLong());
+  }
+
   @Test
   void addToCard_rejectsEpics() {
     givenCard(CardType.EPIC);
@@ -639,6 +653,18 @@ class LabelServiceTest {
   @Test
   void removeFromCard_throwsCardNotFound_whenCardUnknown() {
     when(cards.findById(CARD_ID)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.removeFromCard(USER, CARD_ID, "Bug"))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cardLabels, never()).removeLabel(anyLong(), anyLong());
+  }
+
+  /** Von einer verborgenen Karte wird kein Label entfernt, sie gilt als unbekannt (Issue #2232). */
+  @Test
+  void removeFromCard_lehntVerborgeneKarteAb() {
+    givenCard(CardType.CARD);
+    givenBoardLabel(1L, "Bug");
+    doThrow(new CardNotFoundException()).when(grundlage).pruefeSichtbar(USER, card(CardType.CARD));
 
     assertThatThrownBy(() -> service.removeFromCard(USER, CARD_ID, "Bug"))
         .isInstanceOf(CardNotFoundException.class);
