@@ -303,4 +303,22 @@ describe('useProjectRole bei einem Board in GitLab (Issue #2170, Plan #2152 A9, 
     expect(result.current.fremdBoard).toEqual(IN_GITLAB)
     expect(result.current.canEdit).toBe(false)
   })
+
+  it('verwirft nach einem Fehler bei der Rückkehr den früher geladenen Stand des Projekts (Issue #2260)', async () => {
+    mStand.mockResolvedValueOnce(IN_GITLAB)
+    mStand.mockRejectedValueOnce(new Error('Netzwerkfehler'))
+    mStand.mockRejectedValueOnce(new Error('Netzwerkfehler'))
+    const { result, rerender } = renderHook(({ id }: { id: number | null }) => useProjectRole(id), {
+      initialProps: { id: 5 as number | null },
+    })
+    await waitFor(() => expect(result.current.fremdBoard).toEqual(IN_GITLAB))
+
+    rerender({ id: 6 })
+    await waitFor(() => expect(mStand).toHaveBeenCalledTimes(2))
+    rerender({ id: 5 })
+    await waitFor(() => expect(mStand).toHaveBeenCalledTimes(3))
+
+    await waitFor(() => expect(result.current.canEdit).toBe(true))
+    expect(result.current.fremdBoard).toBeNull()
+  })
 })

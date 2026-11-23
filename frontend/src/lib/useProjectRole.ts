@@ -79,6 +79,7 @@ export function useProjectRole(projectId: number | null): {
       })
       .catch(() => {
         if (active) {
+          // Stryker disable next-line ObjectLiteral: gleichwertig — ein leeres Objekt trifft keine Projektnummer und ergibt ebenfalls fremdBoard null (#2260)
           setGeladenerStand({ projectId, stand: null })
         }
       })
