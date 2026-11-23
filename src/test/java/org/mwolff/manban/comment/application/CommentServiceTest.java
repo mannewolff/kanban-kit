@@ -3,6 +3,8 @@ package org.mwolff.manban.comment.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -997,6 +999,20 @@ class CommentServiceTest {
         vonHand,
         kopf,
         "501");
+  }
+
+  @Test
+  void pruefeSchreibbar_lehntBeiFremdemBoardAbUndLaesstEigenesDurch() {
+    // Given
+    when(boardQuelle.istFremd(1L)).thenReturn(true);
+    when(boardQuelle.istFremd(2L)).thenReturn(false);
+    doCallRealMethod().when(boardQuelle).pruefeSchreibbar(anyLong());
+
+    // When / Then
+    assertThatThrownBy(() -> service.pruefeSchreibbar(1L))
+        .isInstanceOf(FremdesBoardException.class);
+    service.pruefeSchreibbar(2L);
+    verify(boardQuelle).pruefeSchreibbar(2L);
   }
 
   private Comment spiegleUndFange(SpiegelNotiz notiz) {

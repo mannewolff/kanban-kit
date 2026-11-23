@@ -101,6 +101,17 @@ public class CommentService {
     return anlegen(userId, cardId, body, laufStart);
   }
 
+  /**
+   * Lehnt ab, wenn das Projekt ein fremdes Board hat (Issue #2164): für Wege, die vor dem Anlegen
+   * eines Kommentars erst lesen, etwa die Antwort auf eine Rückfrage (Plan #2206 E15). Wie beim
+   * Anlegen gehört der Aufruf hinter die Rechteprüfung des Aufrufers.
+   *
+   * @throws org.mwolff.manban.project.application.FremdesBoardException bei fremdem Board
+   */
+  public void pruefeSchreibbar(long projectId) {
+    boardQuelle.pruefeSchreibbar(projectId);
+  }
+
   private CommentView anlegen(long userId, long cardId, String body, @Nullable Instant laufStart) {
     long projectId = cardService.requireProjectId(cardId);
     permissions.require(userId, projectId, Permission.COMMENT_CREATE);

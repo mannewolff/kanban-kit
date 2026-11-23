@@ -99,6 +99,8 @@ public class RueckfrageService {
   /**
    * Beantwortet die Rückfrage und liefert ihren Stand danach.
    *
+   * @throws org.mwolff.manban.project.application.FremdesBoardException wenn das Board des Projekts
+   *     in einem fremden System liegt
    * @throws CommentNotFoundException wenn an der Karte keine Rückfrage mit dieser Kennung steht
    * @throws RueckfrageUeberholtException bei {@code freigeben} an einer überholten Rückfrage
    * @throws UngueltigeAntwortException wenn die Antwort nicht zur Rückfrage passt
@@ -108,6 +110,9 @@ public class RueckfrageService {
       long userId, long cardId, long kommentarId, AntwortAuftrag auftrag) {
     long projectId = cards.requireProjectId(cardId);
     permissions.require(userId, projectId, Permission.COMMENT_CREATE);
+    // Bei fremdem Board antwortet der Kunde dort, nicht hier (Issue #2164, Plan #2206 E15) — vor
+    // der Suche nach der Rückfrage, damit die Sperre nicht hinter einem 404 verschwindet.
+    comments.pruefeSchreibbar(projectId);
     List<CommentView> kommentare = new ArrayList<>(comments.list(userId, cardId));
     Rueckfrage rueckfrage =
         rueckfragen(kommentare).stream()

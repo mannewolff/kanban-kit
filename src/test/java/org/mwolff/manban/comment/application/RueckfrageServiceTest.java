@@ -34,6 +34,7 @@ import org.mwolff.manban.comment.domain.RueckfragenAuswertung.FrageZustand;
 import org.mwolff.manban.comment.domain.RueckfragenAuswertung.RueckfrageZustand;
 import org.mwolff.manban.comment.domain.Vorschau;
 import org.mwolff.manban.common.TextLimits;
+import org.mwolff.manban.project.application.FremdesBoardException;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.domain.Permission;
@@ -303,6 +304,32 @@ class RueckfrageServiceTest {
         .isInstanceOf(ProjectAccessDeniedException.class);
     verify(comments, never()).list(anyLong(), anyLong());
     verify(comments, never()).create(anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  void beiFremdemBoardWirdNichtsGelesenUndNichtsGeschrieben() {
+    // Given: Das Board des Projekts liegt in einem fremden System (Issue #2164, Plan #2206 E15).
+    rueckfrageAnDerKarte("## Rückfrage\n");
+    doThrow(new FremdesBoardException()).when(comments).pruefeSchreibbar(PROJECT);
+
+    // When / Then
+    assertThatThrownBy(() -> service.antworten(USER, CARD, RUECKFRAGE_ID, allesUebernehmen()))
+        .isInstanceOf(FremdesBoardException.class);
+    verify(comments, never()).list(anyLong(), anyLong());
+    verify(comments, never()).create(anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  void ohneSchreibrechtGehtDieRechtepruefungDerSperreVoran() {
+    // Given: Ein Nicht-Mitglied soll nicht erfahren, dass das Board anderswo liegt.
+    doThrow(new FremdesBoardException()).when(comments).pruefeSchreibbar(PROJECT);
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(USER, PROJECT, Permission.COMMENT_CREATE);
+
+    // When / Then
+    assertThatThrownBy(() -> service.antworten(USER, CARD, RUECKFRAGE_ID, allesUebernehmen()))
+        .isInstanceOf(ProjectAccessDeniedException.class);
   }
 
   @Test
