@@ -512,11 +512,14 @@ class AbgleichServiceTest {
 
   @Test
   void voll_entferntVertraulicheKarten_vorJedemWeiterenAbruf_stattSieAlsGeloeschtZuMarkieren() {
-    // Given: hier gespiegelt sind 7 und 9; in GitLab ist 9 inzwischen vertraulich. Eine Nummer
-    // jenseits des Zahlenbereichs der Karten kann es hier nicht geben.
-    when(bestand.nummern(PROJEKT)).thenReturn(List.of(7, 9));
+    // Given: hier gespiegelt sind 7, 9 und die größte mögliche Nummer; in GitLab sind 9 und die
+    // größte inzwischen vertraulich. Eine Nummer jenseits des Zahlenbereichs der Karten kann es
+    // hier nicht geben.
+    when(bestand.nummern(PROJEKT)).thenReturn(List.of(7, 9, Integer.MAX_VALUE));
     when(quelle.nummern(VERBINDUNG))
-        .thenReturn(new FremdNummern(List.of(7L), List.of(9L, Integer.MAX_VALUE + 1L)));
+        .thenReturn(
+            new FremdNummern(
+                List.of(7L), List.of(9L, (long) Integer.MAX_VALUE, Integer.MAX_VALUE + 1L)));
     when(quelle.geaenderteKarten(VERBINDUNG, T1)).thenReturn(List.of());
 
     // When
@@ -524,7 +527,7 @@ class AbgleichServiceTest {
 
     // Then
     InOrder reihenfolge = inOrder(schreiber, quelle);
-    reihenfolge.verify(schreiber).vertraulicheEntfernen(BOARD, List.of(9));
+    reihenfolge.verify(schreiber).vertraulicheEntfernen(BOARD, List.of(9, Integer.MAX_VALUE));
     reihenfolge.verify(quelle).geaenderteKarten(VERBINDUNG, T1);
     verify(schreiber, never()).alsGeloeschtMarkieren(anyLong(), anyInt(), any());
     verify(quelle, never()).karte(any(), anyLong());
