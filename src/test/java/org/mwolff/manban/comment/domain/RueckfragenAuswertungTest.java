@@ -250,6 +250,22 @@ class RueckfragenAuswertungTest {
   }
 
   @Test
+  void antwortOhneCommitGibtNachtraeglichErgaenzteFreigabeNichtFrei() {
+    // Given — die Rückfrage war eine Sachfrage und wurde ohne Commit beantwortet; danach ergänzt
+    // der Anbieter im Kommentar der Rückfrage die Zeile „Commit: abc“ (Issue #2254)
+    EingegangeneAntwort sachantwort = vomKunden(alles(), SPAETER);
+    assertThat(auswerten(rueckfrage(), null, sachantwort).zustand())
+        .isEqualTo(RueckfrageZustand.BEANTWORTET);
+
+    // When
+    Stand stand = auswerten(freigabe(), null, sachantwort);
+
+    // Then — die Zustimmung zur Sachfrage ist keine Freigabe zur Veröffentlichung
+    assertThat(stand.zustand()).isEqualTo(RueckfrageZustand.OFFEN);
+    assertThat(stand.fragen()).extracting(FrageStand::zustand).containsOnly(FrageZustand.OFFEN);
+  }
+
+  @Test
   void freigabeMitPassendemCommitIstBeantwortet() {
     // When
     Stand stand =

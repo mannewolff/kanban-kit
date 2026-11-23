@@ -109,7 +109,7 @@ public final class RueckfragenAuswertung {
     rueckfrage.eintraege().forEach(e -> staende.put(e.nr(), FrageStand.offen(e.nr())));
     antworten.stream()
         .filter(a -> a.antwort().vorlage() == rueckfrage.kommentarId())
-        .filter(a -> gueltig(a, bezug))
+        .filter(a -> gueltig(a, rueckfrage.istFreigabe(), bezug))
         .sorted(Comparator.comparing(EingegangeneAntwort::am))
         .forEach(a -> anwenden(rueckfrage, a.antwort(), staende));
     RueckfrageZustand zustand;
@@ -135,11 +135,17 @@ public final class RueckfragenAuswertung {
             .isPresent();
   }
 
-  private static boolean gueltig(EingegangeneAntwort eingang, @Nullable String bezug) {
+  /**
+   * Ob die Antwort zählt. Eine Freigabe-Rückfrage gibt nur eine Antwort frei, die ausdrücklich
+   * ihren Stand nennt: Eine Antwort ohne {@code commit} war Zustimmung zu einer Sachfrage, auch
+   * wenn der Kommentar der Rückfrage danach eine Zeile {@code Commit:} bekam (Issue #2254).
+   */
+  private static boolean gueltig(
+      EingegangeneAntwort eingang, boolean freigabe, @Nullable String bezug) {
     String commit = eingang.antwort().commit();
     return !eingang.vonKi()
         && !ZUGANG_STANDARD.equals(eingang.zugangArt())
-        && (commit == null || commit.equals(bezug));
+        && (commit == null ? !freigabe : commit.equals(bezug));
   }
 
   private static void anwenden(
