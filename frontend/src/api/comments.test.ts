@@ -19,11 +19,14 @@ afterEach(() => vi.restoreAllMocks())
 
 describe('commentsApi', () => {
   it('list ruft GET /api/cards/{id}/comments und liefert die geparste Antwort', async () => {
-    spyFetch(JSON.stringify([{
+    const f = spyFetch(JSON.stringify([{
       id: 1, cardId: 7, authorUserId: 5, authorName: 'Ada', body: 'Hallo',
       createdAt: '2026-01-01', updatedAt: '2026-01-01',
     }]))
     const result = await commentsApi.list(7)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/cards/7/comments')
+    expect(c.method ?? 'GET').toBe('GET')
     expect(result).toHaveLength(1)
     expect(result[0].body).toBe('Hallo')
   })
