@@ -139,14 +139,17 @@ class VerbindungRepositoryAdapter implements VerbindungRepository {
   }
 
   @Override
-  public void abgleichGelungen(long projectId, @Nullable Instant vollabgleichAm) {
+  public void abgleichGelungen(
+      long projectId, Instant beansprucht, @Nullable Instant vollabgleichAm) {
     jdbc.update(
         "UPDATE fremdboard_verbindung SET letzter_fehler = NULL,"
             + " letzter_vollabgleich_am ="
-            + " COALESCE(CAST(:voll AS timestamptz), letzter_vollabgleich_am)"
+            + " COALESCE(CAST(:voll AS timestamptz), letzter_vollabgleich_am),"
+            + " stand_am = GREATEST(stand_am, CAST(:beansprucht AS timestamptz))"
             + " WHERE project_id = :projectId",
         new MapSqlParameterSource()
             .addValue(PROJECT_ID, projectId)
+            .addValue("beansprucht", zeit(beansprucht))
             .addValue("voll", zeit(vollabgleichAm)));
   }
 

@@ -61,7 +61,8 @@ class VerbindungBoardQuelleTest {
     }
 
     @Override
-    public void abgleichGelungen(long projectId, @Nullable Instant vollabgleichAm) {
+    public void abgleichGelungen(
+        long projectId, Instant beansprucht, @Nullable Instant vollabgleichAm) {
       throw new UnsupportedOperationException();
     }
 

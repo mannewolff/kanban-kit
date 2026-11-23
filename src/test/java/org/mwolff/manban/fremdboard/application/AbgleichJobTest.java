@@ -85,6 +85,7 @@ class AbgleichJobTest {
     assertThat(danach.letzterAbgleichAm()).isEqualTo(JETZT);
     assertThat(danach.letzterVollabgleichAm()).isEqualTo(JETZT);
     assertThat(danach.letzterFehler()).isNull();
+    assertThat(speicher.standAm).containsEntry(1L, JETZT);
   }
 
   @Test
@@ -103,6 +104,7 @@ class AbgleichJobTest {
     Verbindung danach = speicher.finde(1L).orElseThrow();
     assertThat(danach.letzterAbgleichAm()).isEqualTo(JETZT);
     assertThat(danach.letzterVollabgleichAm()).isEqualTo(voll);
+    assertThat(speicher.standAm).containsEntry(1L, JETZT);
   }
 
   @Test
@@ -205,6 +207,7 @@ class AbgleichJobTest {
     assertThat(danach.letzterAbgleichAm()).isEqualTo(zuletzt);
     assertThat(danach.letzterVollabgleichAm()).isEqualTo(JETZT);
     assertThat(danach.letzterFehler()).isEqualTo("GitLab ist nicht erreichbar");
+    assertThat(speicher.standAm).doesNotContainKey(1L);
   }
 
   @Test
@@ -344,11 +347,14 @@ class AbgleichJobTest {
 
   /**
    * Speicher der Verbindungen im Arbeitsspeicher mit derselben Bedingung wie der Adapter: Ein
-   * Anspruch gelingt nur, solange {@code letzter_abgleich_am} noch den gelesenen Wert trägt.
+   * Anspruch gelingt nur, solange {@code letzter_abgleich_am} noch den gelesenen Wert trägt. Neben
+   * der Verbindung führt er {@code stand_am} je Projekt (Issue #2222), das nur ein gelungener
+   * Abgleich setzt.
    */
   private static final class Speicher implements VerbindungRepository {
 
     private final Map<Long, Verbindung> verbindungen = new HashMap<>();
+    private final Map<Long, Instant> standAm = new HashMap<>();
     private int ansprueche;
     private Runnable vorDemAnspruch = () -> {};
     private Runnable vorDemLesen = () -> {};
@@ -409,7 +415,9 @@ class AbgleichJobTest {
     }
 
     @Override
-    public void abgleichGelungen(long projectId, @Nullable Instant vollabgleichAm) {
+    public void abgleichGelungen(
+        long projectId, Instant beansprucht, @Nullable Instant vollabgleichAm) {
+      standAm.merge(projectId, beansprucht, (alt, neu) -> neu.isAfter(alt) ? neu : alt);
       Verbindung v = verbindungen.get(projectId);
       lege(
           mit(
