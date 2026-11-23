@@ -1601,8 +1601,9 @@ describe('parseNightRunErgebnisstand — Randlagen (Issue #1560)', () => {
 
 /**
  * Die drei Angaben einer gleichzeitigen Nacht (Issue #1878, Plan #1876 E9): Der Handweg fuellt sie
- * nach der Regel von `nachtlaufGleichzeitig` in `kit/board/melder.mjs` auf — nur bei
- * `concurrentPackages` > 1, dann an **jedem** Paket. Eine eigene Pruefung gibt es hier nicht.
+ * nach der Regel von `nachtlaufGleichzeitig` in `kit/board/melder.mjs` auf — bei
+ * `concurrentPackages` > 1 an **jedem** Paket, sonst an jedem, das `gleichzeitig` als Wahrheitswert
+ * fuehrt (Issue #2255). Eine eigene Pruefung gibt es hier nicht.
  */
 describe('parseNightRunErgebnisstand — Gleichzeitigkeit (Issue #1878)', () => {
   const ERFOLG = { ausgang: 'erfolg', pruefung: { id: '100', zustand: 'geprueft' } }
@@ -1616,17 +1617,35 @@ describe('parseNightRunErgebnisstand — Gleichzeitigkeit (Issue #1878)', () => 
     expect(item).toMatchObject({ concurrent: true, checkWaitMs: 776_000, deferredAtMerge: true })
   })
 
-  it('fuellt bei einem Platz nichts auf', () => {
-    expect(gefuehrt(gleichzeitig({ gleichzeitig: true, pruefWartezeitMs: 5000, zusammenfuehrung: 'zurueckgestellt' }, 1))).toEqual([])
+  it('fuellt bei einem Platz die Angaben einer Einheit mit gleichzeitig wie bei zwei Plaetzen auf (Issue #2255)', () => {
+    const felder = { gleichzeitig: true, pruefWartezeitMs: 5000, zusammenfuehrung: 'zurueckgestellt' }
+    expect(gleichzeitig(felder, 1)).toMatchObject({ concurrent: true, checkWaitMs: 5000, deferredAtMerge: true })
+    const ohne = (item: NightRunItem) => Object.fromEntries(FELDER.map((feld) => [feld, item[feld]]))
+    expect(ohne(gleichzeitig(felder, 1))).toEqual(ohne(gleichzeitig(felder, 2)))
   })
 
-  it('fuellt ohne das Feld concurrentPackages nichts auf', () => {
-    const item = einziges(mitEinheit({ ...ERFOLG, gleichzeitig: true, pruefWartezeitMs: 5000 }))
-    expect(gefuehrt(item)).toEqual([])
+  it('fuellt bei einem Platz auch ein falsches gleichzeitig auf (Issue #2255)', () => {
+    expect(gleichzeitig({ gleichzeitig: false, zusammenfuehrung: 'uebernommen' }, 1)).toMatchObject({
+      concurrent: false,
+      deferredAtMerge: false,
+    })
   })
 
-  it.each([[2.5], ['2'], [null], [0]])('fuellt bei concurrentPackages %s nichts auf', (plaetze) => {
-    expect(gefuehrt(gleichzeitig({ gleichzeitig: true }, plaetze))).toEqual([])
+  it('fuellt bei einem Platz ohne gleichzeitig je Einheit nichts auf', () => {
+    expect(gefuehrt(gleichzeitig({ pruefWartezeitMs: 5000, zusammenfuehrung: 'zurueckgestellt' }, 1))).toEqual([])
+  })
+
+  it.each([['true'], [null], [1]])('fuellt bei einem Platz und gleichzeitig %s nichts auf', (wert) => {
+    expect(gefuehrt(gleichzeitig({ gleichzeitig: wert, pruefWartezeitMs: 5000 }, 1))).toEqual([])
+  })
+
+  it('fuellt ohne das Feld concurrentPackages nach der Einheit auf', () => {
+    expect(gefuehrt(einziges(mitEinheit({ ...ERFOLG, gleichzeitig: true, pruefWartezeitMs: 5000 })))).toEqual([...FELDER])
+    expect(gefuehrt(einziges(mitEinheit({ ...ERFOLG, pruefWartezeitMs: 5000 })))).toEqual([])
+  })
+
+  it.each([[2.5], ['2'], [null], [0]])('fuellt bei concurrentPackages %s ohne gleichzeitig nichts auf', (plaetze) => {
+    expect(gefuehrt(gleichzeitig({ zusammenfuehrung: 'zurueckgestellt' }, plaetze))).toEqual([])
   })
 
   it.each([

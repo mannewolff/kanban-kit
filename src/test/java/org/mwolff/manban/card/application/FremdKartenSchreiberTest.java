@@ -66,6 +66,7 @@ class FremdKartenSchreiberTest {
   private LabelRepository labels;
   private CardLabelRepository cardLabels;
   private KartenGrundlage grundlage;
+  private CardArchiveService archiv;
   private boolean fremd;
   private FremdKartenSchreiber schreiber;
 
@@ -121,6 +122,7 @@ class FremdKartenSchreiberTest {
     labels = mock(LabelRepository.class);
     cardLabels = mock(CardLabelRepository.class);
     grundlage = mock(KartenGrundlage.class);
+    archiv = mock(CardArchiveService.class);
     fremd = true;
     schreiber =
         new FremdKartenSchreiber(
@@ -132,7 +134,8 @@ class FremdKartenSchreiberTest {
             labels,
             cardLabels,
             grundlage,
-            projectId -> fremd && projectId == PROJEKT);
+            projectId -> fremd && projectId == PROJEKT,
+            archiv);
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJEKT);
     when(boardService.listColumns(BOARD)).thenReturn(spalten());
   }
@@ -356,6 +359,31 @@ class FremdKartenSchreiberTest {
     assertThat(FlussZeitpunkt.vorgabe()).isEmpty();
     verify(cards, never()).softDelete(anyLong(), any());
     verifyNoInteractions(grundlage);
+  }
+
+  // --- vertraulicheEntfernen (Issue #2200) ---
+
+  @Test
+  void vertraulicheEntfernen_uebergibtDieNummernFuerDasProjektDesBoards() {
+    when(archiv.vertraulicheEntfernen(PROJEKT, BOARD, List.of(NUMMER, 43))).thenReturn(2);
+
+    assertThat(schreiber.vertraulicheEntfernen(BOARD, List.of(NUMMER, 43))).isEqualTo(2);
+  }
+
+  @Test
+  void vertraulicheEntfernen_ohneNummern_liestNichts() {
+    assertThat(schreiber.vertraulicheEntfernen(BOARD, List.of())).isZero();
+
+    verifyNoInteractions(cards, archiv, boardService);
+  }
+
+  @Test
+  void vertraulicheEntfernen_ohneFremdesBoard_scheitert() {
+    fremd = false;
+
+    assertThatThrownBy(() -> schreiber.vertraulicheEntfernen(BOARD, List.of(NUMMER)))
+        .isInstanceOf(IllegalStateException.class);
+    verifyNoInteractions(archiv);
   }
 
   // --- labelSetzen ---

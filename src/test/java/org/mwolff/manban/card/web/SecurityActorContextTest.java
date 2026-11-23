@@ -100,6 +100,47 @@ class SecurityActorContextTest {
   }
 
   @Test
+  void current_stempeltZugangsartApp_fuerDenZugangDerApp() {
+    // Given (Issue #2208, Plan #2206 E6)
+    authenticate("AUTH_PAT", new KanbanPrincipal(7L, 3L, 1L, 2L, "Desktop-App", true));
+
+    // When / Then
+    assertThat(context.current().zugangArt()).isEqualTo(ActorStamp.ZUGANG_APP);
+  }
+
+  @Test
+  void current_stempeltZugangsartStandard_fuerEinGewoehnlichesToken() {
+    // Given
+    authenticate("AUTH_PAT", new KanbanPrincipal(7L, 3L, 1L, 2L, "Nachtlauf", false));
+
+    // When / Then
+    assertThat(context.current().zugangArt()).isEqualTo(ActorStamp.ZUGANG_STANDARD);
+  }
+
+  @Test
+  void current_stempeltKeineZugangsart_beiSession() {
+    // Given: Die Sitzung ist kein Zugang, auch mit einem Principal in den Details.
+    authenticate("AUTH_SESSION", new KanbanPrincipal(7L, 3L, 1L, 2L, "Desktop-App", true));
+
+    // When / Then
+    assertThat(context.current().zugangArt()).isNull();
+  }
+
+  @Test
+  void current_stempeltZugangsartStandard_wennDieDetailsKeinPrincipalSind() {
+    // Given: defensiv — ein Token, dessen Art unbekannt ist, gilt nicht als App.
+    authenticate("AUTH_PAT", "etwas anderes");
+
+    // When / Then
+    assertThat(context.current().zugangArt()).isEqualTo(ActorStamp.ZUGANG_STANDARD);
+  }
+
+  @Test
+  void zugangArt_ohneHerkunft_leer() {
+    assertThat(ActorStamp.unknown().zugangArt()).isNull();
+  }
+
+  @Test
   void current_returnsTokenWithoutName_whenDetailsAreNoPrincipal() {
     // Given: defensiv — AUTH_PAT, aber die Details sind kein KanbanPrincipal.
     authenticate("AUTH_PAT", "etwas anderes");

@@ -47,6 +47,22 @@ describe('RolesPage', () => {
     expect(screen.getByLabelText('EPIC_CREATE für ADMIN')).toBeInTheDocument()
   })
 
+  it('zeigt die Zeile Kunde und die Ressource Störung (Issue #2213)', async () => {
+    const api = {
+      matrix: vi.fn().mockResolvedValue({
+        roles: ['VIEWER', 'CUSTOMER', 'MEMBER'],
+        permissions: [{ key: 'REPAIR_READ', resource: 'REPAIR', operation: 'READ' }],
+        grants: { VIEWER: ['REPAIR_READ'], MEMBER: ['REPAIR_READ'] },
+      } satisfies RoleMatrix),
+    } as unknown as RolesApi
+    render(<RolesPage api={api} />)
+
+    expect(await screen.findByRole('cell', { name: 'Kunde' })).toBeInTheDocument()
+    expect(screen.getByText('Störung')).toBeInTheDocument()
+    expect(screen.getByLabelText('REPAIR_READ für CUSTOMER')).not.toBeChecked()
+    expect(screen.getByLabelText('REPAIR_READ für MEMBER')).toBeChecked()
+  })
+
   it('rendert das Rechte-Grid aus der Matrix mit festen (disabled) Haken', async () => {
     const api = { matrix: vi.fn().mockResolvedValue(MATRIX) } as unknown as RolesApi
     render(<RolesPage api={api} />)

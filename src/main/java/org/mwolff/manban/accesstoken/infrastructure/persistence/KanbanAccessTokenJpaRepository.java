@@ -24,8 +24,8 @@ interface KanbanAccessTokenJpaRepository extends JpaRepository<KanbanAccessToken
 
   Optional<KanbanAccessTokenEntity> findByTokenHash(String tokenHash);
 
-  Optional<KanbanAccessTokenEntity> findByBoardIdAndArtAndRevokedFalse(
-      Long boardId, AccessTokenArt art);
+  Optional<KanbanAccessTokenEntity> findByBoardIdAndUserIdAndArtAndRevokedFalse(
+      Long boardId, Long userId, AccessTokenArt art);
 
   List<KanbanAccessTokenEntity> findByBoardIdInAndArtAndRevokedFalse(
       Collection<Long> boardIds, AccessTokenArt art);

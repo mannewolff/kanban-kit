@@ -11,6 +11,8 @@ import type { EntscheidungsketteView } from '../api/entscheidungskette'
 import type { VorhabenKostenView } from '../api/vorhabenKosten'
 import type { Card, CardByNumber, CardDetail, DerivationNode } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
+import type { AuslieferungZuletzt } from '../api/auslieferung'
+import type { AntwortAuftrag, Rueckfrage } from '../api/rueckfragen'
 import type { KitNamenZustand } from '../api/kitNamen'
 import type { CardLocation } from '../lib/cardLocation'
 import { CardDetailModal, commentFieldProps, parseDependencyInput, parseHerkunftInput } from './CardDetailModal'
@@ -162,7 +164,25 @@ function makeApis() {
   const entscheidungsketteApi = {
     kette: vi.fn<(cardId: number) => Promise<EntscheidungsketteView>>().mockResolvedValue(OHNE_KIT),
   }
-  return { commentsApi, attachmentsApi, cardsApi, boardsApi, nightRunsApi, vorhabenKostenApi, entscheidungsketteApi }
+  // Die Rückfragen der KI (Issue #2217): keine — der Abschnitt bleibt weg, die Kommentare wie heute.
+  const rueckfragenApi = {
+    liste: vi.fn<(cardId: number) => Promise<Rueckfrage[]>>().mockResolvedValue([]),
+    antworten: vi.fn<(cardId: number, kommentarId: number, auftrag: AntwortAuftrag) => Promise<Rueckfrage>>(),
+  }
+  const auslieferungApi = {
+    zuletzt: vi.fn<(projectId: number) => Promise<AuslieferungZuletzt>>().mockResolvedValue({ vorschau: null, veroeffentlichung: null }),
+  }
+  return {
+    commentsApi,
+    attachmentsApi,
+    cardsApi,
+    boardsApi,
+    nightRunsApi,
+    vorhabenKostenApi,
+    entscheidungsketteApi,
+    rueckfragenApi,
+    auslieferungApi,
+  }
 }
 
 /** Die Antwort in einem Projekt, in dem das Kit nicht arbeitet (Issue #2117). */
@@ -4702,5 +4722,314 @@ describe('CardDetailModal — Ansicht als XY (Issue #1926)', () => {
     expect(screen.getByRole('button', { name: 'Senden' })).toBeEnabled()
     expect(screen.getByLabelText('Datei anhängen')).toBeEnabled()
     expect(screen.queryByRole('button', { name: 'Vorschau' })).not.toBeInTheDocument()
+  })
+})
+
+describe('CardDetailModal — Rückfragen der KI (Issue #2217)', () => {
+  const RUECKFRAGE_TEXT = '## Rückfrage\n\nBitte entscheiden.\n\n```json kit-vorlage\n[]\n```'
+  const ANTWORT_TEXT = '## Answer\n\n```json kit-antwort\n{"vorlage": 11, "ja": true}\n```'
+
+  const offen: Rueckfrage = {
+    kommentarId: 11,
+    angelegtAm: ERST,
+    zustand: 'OFFEN',
+    vorschau: null,
+    commit: null,
+    eintraege: [
+      {
+        nr: 1, art: 'FRAGE', frage: 'Welche Farbe?', empfehlung: 'Blau', grund: 'Passt zum Logo', einarbeitung: '',
+        optionen: [{ text: 'Blau', hinweis: null, empfohlen: true }, { text: 'Rot', hinweis: null, empfohlen: false }],
+        zustand: 'OFFEN', wahl: null, text: null, empfehlungUebernommen: false,
+      },
+    ],
+  }
+
+  function apisMitRueckfrage() {
+    const apis = makeApis()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([
+      { id: 11, cardId: 100, authorUserId: 8, authorName: 'KI', body: RUECKFRAGE_TEXT, createdAt: ERST, updatedAt: ERST },
+      { id: 12, cardId: 100, authorUserId: 7, authorName: 'A', body: ANTWORT_TEXT, createdAt: SPAETER, updatedAt: SPAETER },
+      { id: 13, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Gewöhnlicher Kommentar', createdAt: SPAETER, updatedAt: SPAETER },
+    ])
+    apis.rueckfragenApi.liste.mockResolvedValue([offen])
+    return apis
+  }
+
+  it('zeigt die Rückfrage im Block Verlauf vor den Kommentaren und Rückfrage wie Antwort nicht noch einmal als Kommentar', async () => {
+    const apis = apisMitRueckfrage()
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    const karte = await screen.findByTestId('rueckfrage-karte')
+    expect(within(karte).getByText('Welche Farbe?')).toBeInTheDocument()
+    expect(apis.rueckfragenApi.liste).toHaveBeenCalledWith(100)
+    const kommentar = await screen.findByText('Gewöhnlicher Kommentar')
+    // Die Rückfrage steht vor den Kommentaren.
+    expect(karte.compareDocumentPosition(kommentar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByText('Bitte entscheiden.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/"vorlage": 11/)).not.toBeInTheDocument()
+    // Ohne Freigabe-Rückfrage wird die jüngste Auslieferung nicht gebraucht.
+    expect(apis.auslieferungApi.zuletzt).not.toHaveBeenCalled()
+  })
+
+  it('lädt nach einer Antwort die Kommentare neu, damit die Antwort an der Karte steht', async () => {
+    const apis = apisMitRueckfrage()
+    apis.rueckfragenApi.antworten.mockResolvedValue({ ...offen, zustand: 'BEANTWORTET' })
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Alles übernehmen' }))
+
+    await waitFor(() => expect(apis.rueckfragenApi.antworten).toHaveBeenCalledWith(100, 11, { ja: true }))
+    await waitFor(() => expect(apis.commentsApi.list).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('Antwort übermittelt, die KI arbeitet daran')).toBeInTheDocument()
+  })
+
+  it('ersetzt nach einer Antwort nur den Stand der beantworteten Rückfrage', async () => {
+    const apis = apisMitRueckfrage()
+    const zweite: Rueckfrage = { ...offen, kommentarId: 14, eintraege: [{ ...offen.eintraege[0], frage: 'Welche Größe?' }] }
+    apis.rueckfragenApi.liste.mockResolvedValue([offen, zweite])
+    apis.rueckfragenApi.antworten.mockResolvedValue({
+      ...offen,
+      zustand: 'BEANTWORTET',
+      eintraege: [{ ...offen.eintraege[0], zustand: 'BEANTWORTET', wahl: 1, empfehlungUebernommen: true }],
+    })
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    const knoepfe = await screen.findAllByRole('button', { name: 'Alles übernehmen' })
+    expect(knoepfe).toHaveLength(2)
+    fireEvent.click(knoepfe[0])
+
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Alles übernehmen' })).toHaveLength(1))
+    expect(screen.getByText('Welche Größe?')).toBeInTheDocument()
+    expect(screen.getByText('Empfehlung übernommen')).toBeInTheDocument()
+  })
+
+  it('holt für eine Freigabe-Rückfrage die jüngste Veröffentlichung des Projekts', async () => {
+    const apis = apisMitRueckfrage()
+    apis.rueckfragenApi.liste.mockResolvedValue([{ ...offen, zustand: 'BEANTWORTET', commit: 'abc1234', vorschau: 'https://vorschau.example.org' }])
+    apis.auslieferungApi.zuletzt.mockResolvedValue({
+      vorschau: null,
+      veroeffentlichung: { url: 'https://www.example.org', revision: 'abc1234', finishedAt: SPAETER },
+    })
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByRole('link', { name: 'https://www.example.org' })).toBeInTheDocument()
+    expect(apis.auslieferungApi.zuletzt).toHaveBeenCalledWith(9)
+  })
+
+  it('zeigt eine Freigabe-Rückfrage ohne Projekt und bei einem Fehler der Auslieferung ohne „Veröffentlicht unter …“', async () => {
+    const apis = apisMitRueckfrage()
+    apis.rueckfragenApi.liste.mockResolvedValue([{ ...offen, zustand: 'BEANTWORTET', commit: 'abc1234' }])
+    apis.auslieferungApi.zuletzt.mockRejectedValue(new ApiError(500, 'Server Error'))
+    const { unmount } = render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Freigabe erteilt, wird veröffentlicht')).toBeInTheDocument()
+    unmount()
+
+    const ohneProjekt = apisMitRueckfrage()
+    ohneProjekt.rueckfragenApi.liste.mockResolvedValue([{ ...offen, zustand: 'BEANTWORTET', commit: 'abc1234' }])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...ohneProjekt} />)
+    expect(await screen.findByText('Freigabe erteilt, wird veröffentlicht')).toBeInTheDocument()
+    expect(ohneProjekt.auslieferungApi.zuletzt).not.toHaveBeenCalled()
+  })
+
+  it('bleibt ohne Rückfragen vom Server wie heute: alle Kommentare, kein Abschnitt', async () => {
+    const apis = apisMitRueckfrage()
+    apis.rueckfragenApi.liste.mockResolvedValue([])
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText('Gewöhnlicher Kommentar')).toBeInTheDocument()
+    expect(screen.getByText(/"vorlage": 11/)).toBeInTheDocument()
+    expect(screen.getByText('Bitte entscheiden.')).toBeInTheDocument()
+    expect(screen.queryByTestId('rueckfrage-karte')).not.toBeInTheDocument()
+  })
+
+  it('bleibt bei einem Fehler der Rückfragen wie heute', async () => {
+    const apis = apisMitRueckfrage()
+    apis.rueckfragenApi.liste.mockRejectedValue(new ApiError(404, 'Not Found'))
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText(/"vorlage": 11/)).toBeInTheDocument()
+    expect(screen.queryByTestId('rueckfrage-karte')).not.toBeInTheDocument()
+  })
+
+  it('sperrt die Knöpfe der Rückfrage in der Ansicht als jemand anderes', async () => {
+    auth.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    const apis = apisMitRueckfrage()
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByRole('button', { name: 'Alles übernehmen' })).toBeDisabled()
+  })
+})
+
+describe('CardDetailModal — Gespräch mit der KI (Issue #2219)', () => {
+  const GESPRAECH_KUNDE = { id: 21, cardId: 100, authorUserId: 7, authorName: 'A', body: '## Gespräch\n\nGeht das schneller?', createdAt: ERST, updatedAt: ERST, zugangArt: null, vonKi: false }
+  const GESPRAECH_KI = { id: 22, cardId: 100, authorUserId: 8, authorName: 'Rechenzentrum', body: '## Gespräch\n\nJa, morgen.', createdAt: SPAETER, updatedAt: SPAETER, zugangArt: 'STANDARD', vonKi: true }
+  const GEWOEHNLICH = { id: 23, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Gewöhnlicher Kommentar', createdAt: SPAETER, updatedAt: SPAETER, zugangArt: null, vonKi: false }
+
+  function apisMitGespraech() {
+    const apis = makeApis()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([GESPRAECH_KUNDE, GESPRAECH_KI, GEWOEHNLICH])
+    return apis
+  }
+
+  it('zeigt das Gespräch nach den Rückfragen und vor den Kommentaren, seine Beiträge nicht noch einmal als Kommentar', async () => {
+    const apis = apisMitGespraech()
+    apis.rueckfragenApi.liste.mockResolvedValue([
+      {
+        kommentarId: 11, angelegtAm: ERST, zustand: 'OFFEN', vorschau: null, commit: null,
+        eintraege: [{
+          nr: 1, art: 'FRAGE', frage: 'Welche Farbe?', empfehlung: 'Blau', grund: '', einarbeitung: '',
+          optionen: [{ text: 'Blau', hinweis: null, empfohlen: true }],
+          zustand: 'OFFEN', wahl: null, text: null, empfehlungUebernommen: false,
+        }],
+      },
+    ])
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    const gespraech = await screen.findByTestId('gespraech-verlauf')
+    expect(await within(gespraech).findByText('Geht das schneller?')).toBeInTheDocument()
+    expect(within(gespraech).getByText('Ja, morgen.')).toBeInTheDocument()
+    const rueckfrage = await screen.findByTestId('rueckfrage-karte')
+    const kommentar = screen.getByText('Gewöhnlicher Kommentar')
+    expect(rueckfrage.compareDocumentPosition(gespraech) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(gespraech.compareDocumentPosition(kommentar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getAllByText('Geht das schneller?')).toHaveLength(1)
+    expect(screen.queryByText(/## Gespräch/)).not.toBeInTheDocument()
+  })
+
+  it('trägt einen gesendeten Beitrag ins Gespräch ein, nicht unter die Kommentare', async () => {
+    const apis = apisMitGespraech()
+    const neu = { id: 24, cardId: 100, authorUserId: 7, authorName: 'A', body: '## Gespräch\n\nDanke!', createdAt: '2026-09-03T08:00:00.000Z', updatedAt: '2026-09-03T08:00:00.000Z', zugangArt: null, vonKi: false }
+    apis.commentsApi.create.mockResolvedValue(neu)
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    const gespraech = await screen.findByTestId('gespraech-verlauf')
+    await within(gespraech).findByText('Ja, morgen.')
+    fireEvent.change(within(gespraech).getByRole('textbox', { name: 'Dein Beitrag' }), { target: { value: 'Danke!' } })
+    fireEvent.click(within(gespraech).getByRole('button', { name: 'Senden' }))
+
+    await waitFor(() => expect(apis.commentsApi.create).toHaveBeenCalledWith(100, '## Gespräch\n\nDanke!'))
+    expect(await within(gespraech).findByText('Danke!')).toBeInTheDocument()
+    expect(screen.getAllByText('Danke!')).toHaveLength(1)
+    expect(within(gespraech).getByText('Die KI antwortet gleich …')).toBeInTheDocument()
+  })
+
+  it('bietet an einer Karte ohne Gespräch „Gespräch beginnen“ und lässt die Kommentare wie heute', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByRole('button', { name: 'Gespräch beginnen' })).toBeInTheDocument()
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+  })
+
+  it('sperrt das Gespräch in der Ansicht als jemand anderes', async () => {
+    auth.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apisMitGespraech()} />)
+
+    const gespraech = await screen.findByTestId('gespraech-verlauf')
+    expect(await within(gespraech).findByRole('textbox', { name: 'Dein Beitrag' })).toBeDisabled()
+  })
+})
+
+describe('CardDetailModal — Karte aus GitLab, nur lesend (Issue #2170, Plan #2152 A10)', () => {
+  const GITLAB = 'https://gitlab.firma.example/team/board/-/issues/5'
+  const ausGitLab: Card = { ...card, externUrl: GITLAB }
+  const HALT = '## Kette angehalten\n\nFrage: Soll der Export auch PDF können?'
+
+  function apisMitFrage() {
+    const apis = makeApis()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([
+      { id: 21, cardId: 100, authorUserId: 8, authorName: 'Kit', body: HALT, createdAt: ERST, updatedAt: ERST },
+    ])
+    return apis
+  }
+
+  it('Szenario: Ein Durchlauf hält an einer Frage an', async () => {
+    const apis = apisMitFrage()
+    render(<CardDetailModal card={ausGitLab} canEdit={false} canModerateComments projectId={9} onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText('Frage: Soll der Export auch PDF können?')).toBeInTheDocument()
+    const verweis = screen.getByRole('link', { name: 'In GitLab öffnen' })
+    expect(verweis).toHaveAttribute('href', GITLAB)
+    expect(verweis).toHaveAttribute('target', '_blank')
+    expect(verweis).toHaveAttribute('rel', 'noopener noreferrer')
+    // Beantwortet wird in GitLab: Hier gibt es weder Kommentarfeld noch Bearbeiten oder Löschen.
+    expect(screen.queryByLabelText('Kommentar schreiben')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Senden' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Kommentar löschen' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Gespräch beginnen' })).toBeDisabled()
+  })
+
+  it('bleibt nur lesend, auch wenn der Aufrufer Bearbeiten erlaubt', async () => {
+    const apis = apisMitFrage()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([
+      { id: 22, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Eigener', createdAt: ERST, updatedAt: ERST },
+    ])
+    render(<CardDetailModal card={ausGitLab} canEdit canModerateComments projectId={9} onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText('Eigener')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'In GitLab öffnen' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Kommentar bearbeiten' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Kommentar löschen' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Kommentar schreiben')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Datei anhängen')).not.toBeInTheDocument()
+  })
+
+  it('sperrt die Antwort auf eine Rückfrage, die in GitLab beantwortet wird', async () => {
+    const apis = apisMitFrage()
+    apis.rueckfragenApi.liste.mockResolvedValue([
+      {
+        kommentarId: 21,
+        angelegtAm: ERST,
+        zustand: 'OFFEN',
+        vorschau: null,
+        commit: null,
+        eintraege: [
+          {
+            nr: 1, art: 'FRAGE', frage: 'Welche Farbe?', empfehlung: 'Blau', grund: 'Passt', einarbeitung: '',
+            optionen: [{ text: 'Blau', hinweis: null, empfohlen: true }],
+            zustand: 'OFFEN', wahl: null, text: null, empfehlungUebernommen: false,
+          },
+        ],
+      },
+    ])
+    render(<CardDetailModal card={ausGitLab} canEdit={false} projectId={9} onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText('Welche Farbe?')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Alles übernehmen' })).toBeDisabled()
+  })
+
+  it('bietet an einer Karte aus GitLab keinen Statuswechsel an', async () => {
+    const apis = apisMitFrage()
+    render(
+      <CardDetailModal
+        card={{ ...ausGitLab, status: 'READY', canSetStatus: true }}
+        canEdit={false}
+        projectId={9}
+        onClose={vi.fn()}
+        {...apis}
+      />,
+    )
+    expect(await screen.findByText('Frage: Soll der Export auch PDF können?')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument()
+  })
+
+  it('macht aus einer Adresse ohne erlaubtes Schema keinen Verweis, bleibt aber nur lesend', async () => {
+    const apis = apisMitFrage()
+    render(<CardDetailModal card={{ ...card, externUrl: 'javascript:alert(1)' }} canEdit onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Frage: Soll der Export auch PDF können?')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'In GitLab öffnen' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Kommentar schreiben')).not.toBeInTheDocument()
+  })
+
+  it('zeigt bei einer eigenen Karte keinen Verweis nach GitLab', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={{ ...card, externUrl: null }} canEdit onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'In GitLab öffnen' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Kommentar schreiben')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Kommentar bearbeiten' })).toBeInTheDocument()
   })
 })

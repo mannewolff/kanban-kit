@@ -56,6 +56,11 @@ export interface Card {
    * sie; `null` heißt „nicht berechnet", `[]` „ohne Herkunft".
    */
   herkunft: HerkunftsGlied[] | null
+  /**
+   * Adresse der Karte im fremden System (Issue #2162, #2170), Ziel von „In GitLab öffnen“; `null`
+   * bei jeder eigenen Karte. Optional, weil Karten aus dem Frontend selbst (`epicToCard`) keine haben.
+   */
+  externUrl?: string | null
 }
 
 /**
@@ -95,6 +100,11 @@ export interface CardDetail {
    * das Recht der aufrufenden Ansicht (Plan #1294, E10). Ohne eigenen Status immer `false`.
    */
   canSetStatus: boolean
+  /**
+   * Adresse der Karte im fremden System (Issue #2162, #2170), Ziel von „In GitLab öffnen“; `null`
+   * bei jeder eigenen Karte. Optional, weil Karten aus dem Frontend selbst (`epicToCard`) keine haben.
+   */
+  externUrl?: string | null
 }
 
 /**

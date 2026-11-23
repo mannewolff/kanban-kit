@@ -45,7 +45,13 @@ class KartenZweigServiceTest {
     permissions = mock(PermissionChecker.class);
     abhaengigkeiten = mock(KartenAbhaengigkeiten.class);
     zuordnung = mock(KartenZuordnung.class);
-    service = new KartenZweigService(cards, permissions, abhaengigkeiten, zuordnung);
+    service =
+        new KartenZweigService(
+            cards,
+            permissions,
+            abhaengigkeiten,
+            zuordnung,
+            new Anbietersicht(cards, zuordnung, permissions));
   }
 
   private static Card karte(
@@ -263,5 +269,22 @@ class KartenZweigServiceTest {
         .isExactlyInstanceOf(CardNotFoundException.class)
         .hasMessage(new CardNotFoundException().getMessage())
         .hasCauseExactlyInstanceOf(ProjectNotFoundException.class);
+  }
+
+  /**
+   * Eine dem Aufrufer verborgene Karte (Reparatur-Label, kein {@code REPAIR_READ}) endet wie eine
+   * fremde: dieselbe Ausnahme, kein Zweig (Issue #2211, #2238).
+   */
+  @Test
+  void verborgeneKarte_wirftDieselbeAusnahmeWieUnbekannteKarte() {
+    Card verborgen = karte(1L, 1, "[Requirement] Anforderung", null, false);
+    aufDemBoard(verborgen);
+    when(zuordnung.kartenMitLabel(PROJECT, "kit:repair")).thenReturn(List.of(1L));
+    when(cards.findByIds(List.of(1L))).thenReturn(List.of(verborgen));
+
+    assertThatThrownBy(() -> service.kartenZweig(USER, 1L))
+        .isExactlyInstanceOf(CardNotFoundException.class)
+        .hasMessage(new CardNotFoundException().getMessage())
+        .hasNoCause();
   }
 }

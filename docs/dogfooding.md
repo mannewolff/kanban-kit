@@ -516,9 +516,12 @@ Setzt das Kit mehrere Pakete einer Nacht gleichzeitig um (mehr als ein Platz), m
 
 Die Regeln dazu:
 
-- **Nur mit mehr als einem Platz.** Eine Nacht, die ihre Pakete nacheinander umsetzt, meldet keines
-  der drei Felder, und der Leitstand zeigt bei ihren Paketen nichts davon. Ein übergangenes Paket
-  einer gleichzeitigen Nacht trägt die Felder trotzdem, mit `false` bei beiden Wahrheitswerten.
+- **Je Paket erkannt.** Ein Paket, dessen Einheit `gleichzeitig` als Wahrheitswert führt, trägt die
+  drei Felder, gleich wie viele Plätze der Lauf hatte — auch ein Lauf mit einem Platz, den das Kit
+  in eigenen Arbeitskopien umsetzt. Eine Nacht mit mehr als einem Platz trägt sie an jedem Paket:
+  Ein übergangenes Paket trägt die Felder trotzdem, mit `false` bei beiden Wahrheitswerten. Eine
+  Nacht, deren Einheiten kein `gleichzeitig` führen, meldet keines der drei Felder, und der
+  Leitstand zeigt bei ihren Paketen nichts davon (Issue #2255).
 - **Ein kaputter Wert kostet die Meldung nicht.** `concurrent` und `deferredAtMerge` gelten nur als
   JSON-Wahrheitswert — auch der Text `"true"` nicht —, `checkWaitMs` nur als ganze Zahl ab 0.
   Alles andere, auch ein ausdrückliches `null`, nimmt der Leitstand an und zeigt „nicht gemeldet“;

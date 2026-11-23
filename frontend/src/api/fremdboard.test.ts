@@ -5,6 +5,7 @@ import {
   STANDARD_STATUSLABELS,
   type FremdBoardAnsicht,
   type FremdBoardEingabe,
+  type FremdBoardStand,
 } from './fremdboard'
 
 afterEach(() => vi.restoreAllMocks())
@@ -73,6 +74,23 @@ describe('fremdBoardApi', () => {
     expect(init?.method).toBe('PUT')
     expect(JSON.parse(init?.body as string)).toEqual(eingabe)
     expect(ergebnis).toEqual(ansicht)
+  })
+
+  it('stand ruft GET /api/projects/{id}/fremdboard/stand und reicht die Antwort durch', async () => {
+    const stand: FremdBoardStand = {
+      imFremdsystem: true,
+      art: 'GITLAB',
+      standAm: '2026-11-22T08:30:00Z',
+      abgleichGescheitert: false,
+    }
+    const f = antwort(200, stand)
+
+    const ergebnis = await fremdBoardApi.stand(7)
+
+    const [url, init] = f.mock.calls[f.mock.calls.length - 1]
+    expect(url).toBe('/api/projects/7/fremdboard/stand')
+    expect(init?.method).toBeUndefined()
+    expect(ergebnis).toEqual(stand)
   })
 
   it('wirft bei 409 einen ApiError mit dem Grund des Servers', async () => {

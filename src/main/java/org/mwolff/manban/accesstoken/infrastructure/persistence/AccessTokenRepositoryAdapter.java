@@ -44,8 +44,8 @@ class AccessTokenRepositoryAdapter implements AccessTokenRepository {
   }
 
   @Override
-  public Optional<AccessToken> findWirksamenAppZugang(long boardId) {
-    return jpa.findByBoardIdAndArtAndRevokedFalse(boardId, AccessTokenArt.APP)
+  public Optional<AccessToken> findWirksamenAppZugang(long boardId, long userId) {
+    return jpa.findByBoardIdAndUserIdAndArtAndRevokedFalse(boardId, userId, AccessTokenArt.APP)
         .map(AccessTokenRepositoryAdapter::toDomain);
   }
 

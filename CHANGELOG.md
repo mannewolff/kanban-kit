@@ -17,6 +17,58 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.20.0] – 2026-11-23
+
+- chore: v3.19.3
+- Caddy auf 2.11.9 heben: 12 sperrende Befunde der CI-Sicherheitsprüfung
+- chore: v3.19.2
+- Board und Kartendetail zeigen ein fremdes Board nur lesend ([#2170](https://github.com/mannewolff/kanban-kit/issues/2170))
+- Angaben je Paket beim Einlesen von Hand auch bei einem Platz ([#2255](https://github.com/mannewolff/kanban-kit/issues/2255))
+- Freigabe-Rückfrage zählt nur Antworten mit passendem Commit ([#2254](https://github.com/mannewolff/kanban-kit/issues/2254))
+- Freigabe an den angezeigten Stand gebunden ([#2253](https://github.com/mannewolff/kanban-kit/issues/2253))
+- Interne Notiz in GitLabAntwort.notiz direkt getestet, Abdeckungslücke geschlossen ([#2249](https://github.com/mannewolff/kanban-kit/issues/2249))
+- 404 ohne Rumpf in GitLabAbruf getestet, Abdeckungslücke geschlossen ([#2248](https://github.com/mannewolff/kanban-kit/issues/2248))
+- Mutations-Überlebende in useProjectRole getötet ([#2244](https://github.com/mannewolff/kanban-kit/issues/2244))
+- Leerraumzeile vor dem Kopf in traegtKopf getestet, Mutant getötet ([#2243](https://github.com/mannewolff/kanban-kit/issues/2243))
+- Leerraumzeile vor dem Kopf und Sprache des Beitrags getestet, Mutanten getötet ([#2242](https://github.com/mannewolff/kanban-kit/issues/2242))
+- URL von commentsApi.list getestet, Mutant getötet ([#2241](https://github.com/mannewolff/kanban-kit/issues/2241))
+- Wert und unbekannter Wert der Auslieferungsart getestet, Mutanten getötet ([#2239](https://github.com/mannewolff/kanban-kit/issues/2239))
+- Verborgene Karte im Herkunftsbaum getestet, Mutant getötet ([#2238](https://github.com/mannewolff/kanban-kit/issues/2238))
+- Antwort auf die Rückfrage mit der genannten Kennung getestet, Mutanten getötet ([#2237](https://github.com/mannewolff/kanban-kit/issues/2237))
+- Fremde und andere Kit-Labels ohne Rückfrage warten nicht, Mutant getötet ([#2236](https://github.com/mannewolff/kanban-kit/issues/2236))
+- Zaunlänge und schließende Zeile eines Kit-Blocks getestet, Mutanten getötet ([#2235](https://github.com/mannewolff/kanban-kit/issues/2235))
+- Filter verborgener Karten in der Listensicht über Anbietersicht.ohneVerborgene, Mutant entfällt ([#2234](https://github.com/mannewolff/kanban-kit/issues/2234))
+- Verborgene Quellkarte beim Eröffnen eines Vorhabens getestet, Mutant getötet ([#2233](https://github.com/mannewolff/kanban-kit/issues/2233))
+- Verborgene Karte beim Zuordnen und Entfernen eines Labels getestet, Mutant getötet ([#2232](https://github.com/mannewolff/kanban-kit/issues/2232))
+- Objekt statt Liste und Felder ohne Text in der Rückfrage getestet, Mutanten getötet ([#2231](https://github.com/mannewolff/kanban-kit/issues/2231))
+- Randfälle beim Lesen einer Antwort getestet, Mutanten getötet ([#2230](https://github.com/mannewolff/kanban-kit/issues/2230))
+- Leere Liste und leere Sperrmenge in der Anbietersicht getestet, Mutanten getötet ([#2229](https://github.com/mannewolff/kanban-kit/issues/2229))
+- Freigabe allein und Antwort an der Längengrenze getestet, Mutanten getötet ([#2228](https://github.com/mannewolff/kanban-kit/issues/2228))
+- Feld weg beantwortet keine gewöhnliche Frage, Mutant getötet ([#2227](https://github.com/mannewolff/kanban-kit/issues/2227))
+- Sichtbarkeitsprüfung beim Verschieben, Status und Umzug getestet ([#2226](https://github.com/mannewolff/kanban-kit/issues/2226))
+- Größte vertrauliche Nummer im Vollabgleich wird entfernt ([#2225](https://github.com/mannewolff/kanban-kit/issues/2225))
+- Frontend-Aufruf fremdBoardApi.stand und Doku zum Board in GitLab ([#2224](https://github.com/mannewolff/kanban-kit/issues/2224))
+- Knappe Auskunft über das Board in GitLab für jedes Mitglied ([#2223](https://github.com/mannewolff/kanban-kit/issues/2223))
+- Spalte stand_am hält die Zeit des zuletzt gelungenen Abgleichs fest ([#2222](https://github.com/mannewolff/kanban-kit/issues/2222))
+- chore: v3.19.1
+- Integrationstests aus Plan #2206 laufen im Verbund grün ([#2252](https://github.com/mannewolff/kanban-kit/issues/2252))
+- Antwort auf eine Rückfrage ist bei fremdem Board gesperrt ([#2251](https://github.com/mannewolff/kanban-kit/issues/2251))
+- Idee mit Anhängen einstellen ([#2220](https://github.com/mannewolff/kanban-kit/issues/2220))
+- Gespräch mit der KI im Kartendetail ([#2219](https://github.com/mannewolff/kanban-kit/issues/2219))
+- Startseite des Projekts zeigt, was auf den Kunden wartet ([#2218](https://github.com/mannewolff/kanban-kit/issues/2218))
+- Rückfragen im Kartendetail per Klick beantworten und freigeben ([#2217](https://github.com/mannewolff/kanban-kit/issues/2217))
+- Modul anbieter liefert „wartet auf dich“ und Erreichbarkeit ([#2216](https://github.com/mannewolff/kanban-kit/issues/2216))
+- Auslieferung unterscheidet Vorschau und Veröffentlichung ([#2215](https://github.com/mannewolff/kanban-kit/issues/2215))
+- Kartenprüfungen, Anhänge und Mails verbergen Störungen vor Kunden ([#2214](https://github.com/mannewolff/kanban-kit/issues/2214))
+- Rolle Kunde in Mitgliederverwaltung und Rollenseite ([#2213](https://github.com/mannewolff/kanban-kit/issues/2213))
+- Kunde hält einen eigenen App-Zugang je Board ([#2212](https://github.com/mannewolff/kanban-kit/issues/2212))
+- Reparaturkarten bleiben Kunden auf allen Kartenwegen verborgen ([#2211](https://github.com/mannewolff/kanban-kit/issues/2211))
+- Server wertet Rückfragen und Antworten aus ([#2210](https://github.com/mannewolff/kanban-kit/issues/2210))
+- Rolle Kunde und Recht auf Störungen in der Rollenmatrix ([#2209](https://github.com/mannewolff/kanban-kit/issues/2209))
+- Kommentare kennen ihren Absender und schützen Antworten vor dem Rechenzentrum ([#2208](https://github.com/mannewolff/kanban-kit/issues/2208))
+- Sieben SonarCloud-Befunde nach v3.19.0 ausbessern ([#2201](https://github.com/mannewolff/kanban-kit/issues/2201))
+- Vertrauliche Inhalte aus dem GitLab-Spiegel entfernen ([#2200](https://github.com/mannewolff/kanban-kit/issues/2200))
+
 ## [3.19.0] – 2026-11-16
 
 - chore: v3.18.2

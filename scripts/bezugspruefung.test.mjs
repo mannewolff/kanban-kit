@@ -721,7 +721,7 @@ test('jedes fremde Abbild mit Fundstelle in den Betriebsdateien ist an einen Dig
   const bausteine = bausteineLesen(join(HIER, 'bausteine.json'));
   const gebunden = bausteine.filter((b) => b.digest).map((b) => b.bezugsstelle).sort();
   assert.deepEqual(gebunden, [
-    'caddy:2.11.7',
+    'caddy:2.11.9',
     'chrislusf/seaweedfs:4.47',
     'eclipse-temurin:25.0.4.1_1-jre',
     'golang:1.27.3-bookworm',

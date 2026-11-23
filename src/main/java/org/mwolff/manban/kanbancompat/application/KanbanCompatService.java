@@ -351,7 +351,7 @@ public class KanbanCompatService {
   @Transactional
   public void move(KanbanPrincipal principal, long cardId, String column, int position) {
     long boardId = requireBound(principal);
-    ingest.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(principal.userId(), cardId, boardId);
     pruefeSchreibbar(boardId);
     if (cardService.getCard(principal.userId(), cardId).status() != null) {
       // Die Kanban-Keys sind zugleich die Statusnamen der card-Fassade (E24).
@@ -377,7 +377,7 @@ public class KanbanCompatService {
   @Transactional
   public Item update(KanbanPrincipal principal, long cardId, String title, @Nullable String body) {
     long boardId = requireBound(principal);
-    ingest.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(principal.userId(), cardId, boardId);
     pruefeSchreibbar(boardId);
     return item(boardId, ingest.updateContent(principal.userId(), cardId, title, body));
   }
@@ -397,7 +397,7 @@ public class KanbanCompatService {
   @Transactional
   public void addLabel(KanbanPrincipal principal, long cardId, String name) {
     long boardId = requireBound(principal);
-    ingest.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(principal.userId(), cardId, boardId);
     pruefeSchreibbar(boardId);
     labelService.addToCard(principal.userId(), cardId, name);
   }
@@ -406,7 +406,7 @@ public class KanbanCompatService {
   @Transactional
   public void removeLabel(KanbanPrincipal principal, long cardId, String name) {
     long boardId = requireBound(principal);
-    ingest.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(principal.userId(), cardId, boardId);
     pruefeSchreibbar(boardId);
     labelService.removeFromCard(principal.userId(), cardId, name);
   }
@@ -427,7 +427,7 @@ public class KanbanCompatService {
       @Nullable String idempotencyKey,
       @Nullable Instant laufStart) {
     long boardId = requireBound(principal);
-    ingest.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(principal.userId(), cardId, boardId);
     pruefeSchreibbar(boardId);
     String idempotent = normalizeIdempotencyKey(idempotencyKey);
     if (idempotent == null) {
@@ -454,19 +454,8 @@ public class KanbanCompatService {
   @Transactional(readOnly = true)
   public List<Comment> listComments(KanbanPrincipal principal, long cardId) {
     long boardId = requireBound(principal);
-    ingest.requireReadableOnBoard(cardId, boardId);
-    return commentService.list(principal.userId(), cardId).stream()
-        .map(
-            c ->
-                new Comment(
-                    c.id(),
-                    c.authorName(),
-                    c.body(),
-                    c.createdAt(),
-                    c.origin(),
-                    c.tokenName(),
-                    c.agent()))
-        .toList();
+    ingest.requireReadableOnBoard(principal.userId(), cardId, boardId);
+    return commentService.list(principal.userId(), cardId).stream().map(Comment::aus).toList();
   }
 
   /**
@@ -488,7 +477,7 @@ public class KanbanCompatService {
       String body,
       @Nullable Instant laufStart) {
     long boardId = requireBound(principal);
-    ingest.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(principal.userId(), cardId, boardId);
     pruefeSchreibbar(boardId);
     boolean onCard =
         commentService.list(principal.userId(), cardId).stream().anyMatch(c -> c.id() == commentId);
@@ -514,7 +503,7 @@ public class KanbanCompatService {
   @Transactional(readOnly = true)
   public List<Activity> listActivity(KanbanPrincipal principal, long cardId) {
     long boardId = requireBound(principal);
-    ingest.requireReadableOnBoard(cardId, boardId);
+    ingest.requireReadableOnBoard(principal.userId(), cardId, boardId);
     return cardService.listActivityViews(principal.userId(), cardId).stream()
         .map(
             a ->
@@ -727,7 +716,47 @@ public class KanbanCompatService {
               description =
                   "Vom Werkzeug gemeldetes Modell (Header X-Agent-Model); null ohne Angabe.",
               example = "claude-opus-5-5")
-          @Nullable String agent) {}
+          @Nullable String agent,
+      @Schema(
+              description =
+                  "Art des Zugangs beim Anlegen: STANDARD (gewöhnlicher Projekt-Zugang) oder APP"
+                      + " (Zugang der Desktop-App); null bei der Oberfläche und älteren"
+                      + " Kommentaren.",
+              example = "STANDARD")
+          @Nullable String zugangArt,
+      @Schema(
+              description =
+                  "Ob der Kommentar ein Beitrag der KI ist: angelegt über einen STANDARD-Zugang,"
+                      + " dessen Inhaber dabei Owner oder Admin des Projekts war.",
+              example = "false")
+          boolean vonKi) {
+
+    /** Ein Kommentar ohne Zugangsart, nicht von der KI — die bisherige Parameterliste (#2208). */
+    public Comment(
+        Long id,
+        String author,
+        String body,
+        Instant createdAt,
+        @Nullable String origin,
+        @Nullable String tokenName,
+        @Nullable String agent) {
+      this(id, author, body, createdAt, origin, tokenName, agent, null, false);
+    }
+
+    /** Die Sicht der Kanban-Strecke auf einen Kommentar der Kommentar-Fassade (Issue #2208). */
+    static Comment aus(CommentService.CommentView c) {
+      return new Comment(
+          c.id(),
+          c.authorName(),
+          c.body(),
+          c.createdAt(),
+          c.origin(),
+          c.tokenName(),
+          c.agent(),
+          c.zugangArt(),
+          c.vonKi());
+    }
+  }
 
   /**
    * Ein Eintrag des Aktivitätsverlaufs eines Items (#876). Feldgleich mit der Antwort von {@code

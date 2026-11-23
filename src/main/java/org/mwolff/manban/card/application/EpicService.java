@@ -48,6 +48,7 @@ public class EpicService {
   private final KartenSicht sicht;
   private final VorhabenMassenzuordnung massenzuordnung;
   private final Clock clock;
+  private final Anbietersicht anbieter;
 
   public EpicService(
       CardRepository cards,
@@ -58,7 +59,8 @@ public class EpicService {
       KartenGrundlage grundlage,
       KartenSicht sicht,
       VorhabenMassenzuordnung massenzuordnung,
-      Clock clock) {
+      Clock clock,
+      Anbietersicht anbieter) {
     this.cards = cards;
     this.abhaengigkeiten = abhaengigkeiten;
     this.boardService = boardService;
@@ -68,6 +70,7 @@ public class EpicService {
     this.sicht = sicht;
     this.massenzuordnung = massenzuordnung;
     this.clock = clock;
+    this.anbieter = anbieter;
   }
 
   /**
@@ -162,7 +165,10 @@ public class EpicService {
     // Ungefiltert in die Zugehörigkeitsrechnung — genau wie in listEpics: EpicMembership filtert
     // Archiviertes selbst heraus, kappt die Kette aber nicht daran. Ein Vorfilter hier ergäbe eine
     // andere Mitgliedermenge als auf der Kachel, und beide Zahlen stammen aus derselben Ansicht.
-    List<Card> alle = cards.findByBoardId(boardId);
+    // Karten, die der Aufrufer nicht sieht, fehlen von Anfang an (Issue #2211): im Baum, in der
+    // Zugehörigkeit und als Abhängigkeit.
+    Set<Integer> verborgen = anbieter.verborgeneNummern(userId, projectId);
+    List<Card> alle = Anbietersicht.ohneVerborgene(cards.findByBoardId(boardId), verborgen);
     Set<Card> mitglieder = EpicMembership.compute(alle).get(epicId);
     if (mitglieder == null) {
       throw new CardNotFoundException();
@@ -176,7 +182,7 @@ public class EpicService {
     Set<Long> ids = baumKarten.stream().map(Card::requireId).collect(Collectors.toSet());
     return DerivationTree.build(
         baumKarten,
-        abhaengigkeiten.abhaengigkeitenJeKarte(ids),
+        Anbietersicht.ohneVerborgeneNummern(abhaengigkeiten.abhaengigkeitenJeKarte(ids), verborgen),
         FremdeVorfahren.nummern(cards, projectId, alle),
         zuordnung.gezaehlteMarken(boardId, ids));
   }
@@ -198,9 +204,11 @@ public class EpicService {
    */
   @Transactional(readOnly = true)
   public List<EpicView> listEpics(long userId, long boardId) {
-    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.requireMembership(userId, projectId);
 
-    List<Card> all = cards.findByBoardId(boardId);
+    // Verborgene Karten zählen nicht mit und erscheinen in keiner Nummernliste (Issue #2211).
+    List<Card> all = anbieter.sichtbare(userId, projectId, cards.findByBoardId(boardId));
     Map<Long, String> columnNames =
         boardService.listColumns(boardId).stream()
             .collect(Collectors.toMap(ColumnView::id, ColumnView::name));
@@ -330,6 +338,7 @@ public class EpicService {
       String title,
       @Nullable String description) {
     Card quelle = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    anbieter.pruefeSichtbar(userId, quelle);
     permissions.require(userId, quelle.projectId(), Permission.EPIC_CREATE);
     grundlage.pruefeSchreibbar(quelle.projectId());
     requireVorgangEroeffenbar(quelle);

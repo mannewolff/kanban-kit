@@ -154,7 +154,9 @@ public class StandardLabelService {
         Sache.WARTET_EREIGNIS,
         Sache.REPARATUR,
         Sache.HOTFIX,
-        Sache.MANUELL);
+        Sache.MANUELL,
+        Sache.ANBIETER,
+        Sache.FREIGABE);
     zuordnen(
         tabelle,
         new Darstellung(LAUF, FARBE_LAUF),

@@ -6,10 +6,24 @@ import {
   canManageProject,
   canModerateComments,
   canTransferOwnership,
+  darfStoerungenSehen,
   isPlatformAdmin,
 } from './roles'
 
 describe('roles', () => {
+  it('verbirgt Störungen nur vor der Rolle Kunde (Issue #2213)', () => {
+    expect(darfStoerungenSehen('CUSTOMER')).toBe(false)
+    for (const role of ['VIEWER', 'MEMBER', 'ADMIN', 'OWNER']) {
+      expect(darfStoerungenSehen(role)).toBe(true)
+    }
+    expect(darfStoerungenSehen('CUSTOMER', true)).toBe(true)
+  })
+
+  it('lässt den Kunden Karten bearbeiten wie ein Mitglied (Issue #2213)', () => {
+    expect(canEditCards('CUSTOMER')).toBe(true)
+    expect(canManageMembers('CUSTOMER')).toBe(false)
+  })
+
   it('gibt einem Plattform-Admin Vollzugriff', () => {
     expect(canEditCards('VIEWER', true)).toBe(true)
     expect(canManageProject('VIEWER', true)).toBe(true)

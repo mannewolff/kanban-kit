@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import org.mwolff.manban.deployment.domain.Auslieferungsart;
 import org.mwolff.manban.deployment.domain.Auslieferungsversuch;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
@@ -66,12 +67,25 @@ public class DeploymentService {
   }
 
   /**
-   * Der Versuch mit dem größten {@code finishedAt}, gleich welchen Ausgangs (E2): Die Commits eines
-   * gescheiterten Versuchs sind schon gespeichert und müssen nicht erneut gemeldet werden.
+   * Die Veröffentlichung mit dem größten {@code finishedAt}, gleich welchen Ausgangs (E2): Die
+   * Commits eines gescheiterten Versuchs sind schon gespeichert und müssen nicht erneut gemeldet
+   * werden. Eine Vorschau verschiebt den Stand nicht (Issue #2215, Plan #2206 E10).
    */
   @Transactional(readOnly = true)
   public Optional<Auslieferungsversuch> letzterStand(long userId, long projectId) {
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
     return store.letzterVersuch(projectId);
+  }
+
+  /**
+   * Die jüngste Vorschau und die jüngste Veröffentlichung des Projekts mit Adresse (Issue #2215,
+   * Plan #2206 E10). Verlangt die Mitgliedschaft.
+   */
+  @Transactional(readOnly = true)
+  public ZuletztGemeldet zuletzt(long userId, long projectId) {
+    permissions.requireMembership(userId, projectId);
+    return new ZuletztGemeldet(
+        store.juengster(projectId, Auslieferungsart.VORSCHAU).orElse(null),
+        store.juengster(projectId, Auslieferungsart.VEROEFFENTLICHUNG).orElse(null));
   }
 }

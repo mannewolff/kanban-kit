@@ -40,7 +40,7 @@ class RightsDocumentationTest {
 
   /** Kopfzeile der Rechte-Matrix — Anker für das Einlesen ihrer Zeilen. */
   private static final String MATRIX_KOPF =
-      "| Recht | Schlüssel | VIEWER | MEMBER | ADMIN | OWNER |";
+      "| Recht | Schlüssel | VIEWER | CUSTOMER | MEMBER | ADMIN | OWNER |";
 
   /**
    * Eine Matrix-Zeile mit Schlüssel: erste Spalte beliebig, zweite Spalte der Enum-Name in

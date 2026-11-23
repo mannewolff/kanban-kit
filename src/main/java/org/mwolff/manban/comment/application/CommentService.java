@@ -3,17 +3,23 @@ package org.mwolff.manban.comment.application;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.card.application.ActorContext;
 import org.mwolff.manban.card.application.ActorContext.ActorStamp;
+import org.mwolff.manban.card.application.Anbietersicht;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.FremdKartenSchreiber.FremderAkteur;
 import org.mwolff.manban.comment.domain.Comment;
+import org.mwolff.manban.comment.domain.Kartenpruefung;
 import org.mwolff.manban.project.application.BoardQuelle;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
@@ -31,7 +37,21 @@ import org.springframework.transaction.annotation.Transactional;
  * org.mwolff.manban.project.application.FremdesBoardException} ab, wenn das Board des Projekts in
  * einem fremden System liegt. Allein der Spiegel-Schreibweg ({@link #spiegeln}, {@link
  * #spiegelGeloescht}) schreibt dann noch.
+ *
+ * <p>Absender (Issue #2208, Plan #2206 E6, E7): Jeder angelegte Kommentar hält die Art des Zugangs
+ * fest und ob er ein Beitrag der KI ist. Einen Kommentar, dessen Kopf eine Antwort ist, weisen
+ * Anlegen und Ändern über einen gewöhnlichen Zugang ({@code STANDARD}) ab — das Rechenzentrum
+ * antwortet sich nicht selbst und gibt nichts frei.
+ *
+ * <p>Störungen beim Anbieter (Issue #2214, Plan #2206 E2): Ohne das Recht {@link
+ * Permission#REPAIR_READ} enden Lesen, Anlegen und Ändern an einer verborgenen Karte wie an einer
+ * unbekannten ({@link Anbietersicht#requireSichtbar}), und die Listen lassen Kommentare verborgener
+ * Karten und nicht grüne Kartenprüfungen ({@link Kartenpruefung#istVerborgen}) aus.
  */
+// PMD.CouplingBetweenObjects: Der Dienst ist die eine Stelle, die Kommentare mit Rechten, Herkunft,
+// Absender, fremdem Board und der Sicht des Anbieters (Issue #2214) verbindet; aufgeteilt läge
+// die Rechteprüfung eines Kommentars an zwei Orten.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class CommentService {
 
@@ -44,6 +64,7 @@ public class CommentService {
   private final ActorContext actor;
   private final Clock clock;
   private final BoardQuelle boardQuelle;
+  private final Anbietersicht anbieter;
 
   public CommentService(
       CommentRepository comments,
@@ -52,7 +73,8 @@ public class CommentService {
       UserLookup users,
       ActorContext actor,
       Clock clock,
-      BoardQuelle boardQuelle) {
+      BoardQuelle boardQuelle,
+      Anbietersicht anbieter) {
     this.comments = comments;
     this.cardService = cardService;
     this.permissions = permissions;
@@ -60,6 +82,7 @@ public class CommentService {
     this.actor = actor;
     this.clock = clock;
     this.boardQuelle = boardQuelle;
+    this.anbieter = anbieter;
   }
 
   /** Legt einen Kommentar ohne Laufkennung an — der Session-Weg (Plan #1423, A3). */
@@ -78,15 +101,33 @@ public class CommentService {
     return anlegen(userId, cardId, body, laufStart);
   }
 
+  /**
+   * Lehnt ab, wenn das Projekt ein fremdes Board hat (Issue #2164): für Wege, die vor dem Anlegen
+   * eines Kommentars erst lesen, etwa die Antwort auf eine Rückfrage (Plan #2206 E15). Wie beim
+   * Anlegen gehört der Aufruf hinter die Rechteprüfung des Aufrufers.
+   *
+   * @throws org.mwolff.manban.project.application.FremdesBoardException bei fremdem Board
+   */
+  public void pruefeSchreibbar(long projectId) {
+    boardQuelle.pruefeSchreibbar(projectId);
+  }
+
   private CommentView anlegen(long userId, long cardId, String body, @Nullable Instant laufStart) {
     long projectId = cardService.requireProjectId(cardId);
     permissions.require(userId, projectId, Permission.COMMENT_CREATE);
+    anbieter.requireSichtbar(userId, cardId);
     boardQuelle.pruefeSchreibbar(projectId);
-    String authorName = users.findById(userId).map(UserSummary::displayName).orElse(UNBEKANNT);
-    Instant now = clock.instant();
     // Herkunft aus derselben Quelle wie der Verlauf (Issue #1620, A4); ohne Stempel bleibt sie
     // leer — unbekannt, nicht geraten (A6).
     ActorStamp stamp = actor.current();
+    pruefeKeineAntwortDesRechenzentrums(stamp, body);
+    String authorName = users.findById(userId).map(UserSummary::displayName).orElse(UNBEKANNT);
+    Instant now = clock.instant();
+    String zugangArt = stamp.zugangArt();
+    // Der Absender entscheidet, nicht eine Zeile im Text (Kriterium 11, E6).
+    boolean vonKi =
+        ActorStamp.ZUGANG_STANDARD.equals(zugangArt)
+            && permissions.istEchterOwnerOderAdmin(userId, projectId);
     Comment saved =
         comments.save(
             new Comment(
@@ -100,8 +141,23 @@ public class CommentService {
                 laufStart,
                 stamp.originName(),
                 stamp.tokenName(),
-                stamp.agent()));
+                stamp.agent(),
+                null,
+                null,
+                null,
+                zugangArt,
+                vonKi));
     return view(saved);
+  }
+
+  /**
+   * Weist einen Kommentar ab, dessen Kopf eine Antwort ist ({@link Comment#kopfIstAntwort}), wenn
+   * er über einen gewöhnlichen Zugang kommt (E7).
+   */
+  private static void pruefeKeineAntwortDesRechenzentrums(ActorStamp stamp, String body) {
+    if (ActorStamp.ZUGANG_STANDARD.equals(stamp.zugangArt()) && Comment.kopfIstAntwort(body)) {
+      throw new ProjectAccessDeniedException();
+    }
   }
 
   /**
@@ -186,6 +242,29 @@ public class CommentService {
     }
   }
 
+  /**
+   * Entfernt die gespiegelten Kommentare der Karte mit diesen Kennungen endgültig, weil die Notizen
+   * im fremden System intern sind (Issue #2200): Der Zugang des Spiegels darf dort mehr lesen als
+   * ein Mitglied des Projekts. Anders als bei einer gelöschten Notiz ({@link #spiegelGeloescht})
+   * bleibt auch eine Meldung des Kits nicht stehen. Eine nicht übernommene Kennung ist kein Fehler.
+   * Ohne Rechteprüfung wie {@link #spiegeln}.
+   *
+   * @param kennungen Kennungen der internen Notizen im fremden System
+   * @throws IllegalStateException wenn das Projekt der Karte kein fremdes Board hat
+   */
+  @Transactional
+  public void spiegelVertraulicheEntfernen(long cardId, Collection<String> kennungen) {
+    if (kennungen.isEmpty()) {
+      return;
+    }
+    pruefeFremd(cardId);
+    for (String kennung : kennungen) {
+      comments
+          .findByCardIdAndExternKennung(cardId, kennung)
+          .ifPresent(kommentar -> comments.deleteById(kommentar.requireId()));
+    }
+  }
+
   private void pruefeFremd(long cardId) {
     long projectId = cardService.requireProjectId(cardId);
     if (!boardQuelle.istFremd(projectId)) {
@@ -194,10 +273,54 @@ public class CommentService {
     }
   }
 
+  /**
+   * Die Kommentare der Karte. Ohne {@link Permission#REPAIR_READ} endet eine verborgene Karte wie
+   * eine unbekannte, und nicht grüne Kartenprüfungen fehlen (Issue #2214).
+   */
   @Transactional(readOnly = true)
   public List<CommentView> list(long userId, long cardId) {
-    permissions.requireMembership(userId, cardService.requireProjectId(cardId));
-    return comments.findByCardId(cardId).stream().map(CommentService::view).toList();
+    long projectId = cardService.requireProjectId(cardId);
+    permissions.requireMembership(userId, projectId);
+    anbieter.requireSichtbar(userId, cardId);
+    boolean stoerungen = anbieter.siehtStoerungen(userId, projectId);
+    return comments.findByCardId(cardId).stream()
+        .filter(c -> stoerungen || !Kartenpruefung.istVerborgen(c.body()))
+        .map(CommentService::view)
+        .toList();
+  }
+
+  /**
+   * Die Kommentare mehrerer Karten eines Projekts je Karte, in einem Zugriff (Issue #2216, Plan
+   * #2206 E14) — für „wartet auf dich“, das die Rückfragen aller Karten eines Projekts auswertet.
+   * Reihenfolge je Karte wie {@link #list}; Karten ohne sichtbaren Kommentar fehlen. Ohne {@link
+   * Permission#REPAIR_READ} fehlen Kommentare verborgener Karten und nicht grüne Kartenprüfungen.
+   *
+   * <p>Verlangt die Mitgliedschaft im Projekt. Die Zugehörigkeit der Karten zum Projekt prüft der
+   * Aufrufer: Die IDs stammen aus einer rechtegeprüften Abfrage der Karten dieses Projekts.
+   */
+  @Transactional(readOnly = true)
+  public Map<Long, List<CommentView>> listJeKarte(
+      long userId, long projectId, Collection<Long> cardIds) {
+    permissions.requireMembership(userId, projectId);
+    boolean stoerungen = anbieter.siehtStoerungen(userId, projectId);
+    Set<Long> verborgeneKarten = anbieter.verborgeneKartenIds(userId, projectId);
+    Map<Long, List<CommentView>> jeKarte = new LinkedHashMap<>();
+    comments.findKettenKommentare(cardIds).stream()
+        .filter(c -> !verborgen(stoerungen, verborgeneKarten, c.cardId(), c.body()))
+        .forEach(c -> jeKarte.computeIfAbsent(c.cardId(), k -> new ArrayList<>()).add(view(c)));
+    return jeKarte;
+  }
+
+  /**
+   * Ob der Kommentar dem Aufrufer verborgen bleibt: an einer verborgenen Karte oder eine nicht
+   * grüne Kartenprüfung.
+   *
+   * @param verborgeneKarten aus {@link Anbietersicht#verborgeneKartenIds}; leer, wenn der Aufrufer
+   *     Störungen sieht
+   */
+  private static boolean verborgen(
+      boolean stoerungen, Set<Long> verborgeneKarten, long cardId, String body) {
+    return !stoerungen && (verborgeneKarten.contains(cardId) || Kartenpruefung.istVerborgen(body));
   }
 
   /** Ändert einen Kommentar ohne Laufkennung — der Session-Weg (Plan #1423, A3). */
@@ -220,15 +343,17 @@ public class CommentService {
     Comment comment = comments.findById(commentId).orElseThrow(CommentNotFoundException::new);
     long projectId = cardService.requireProjectId(comment.cardId());
     permissions.require(userId, projectId, Permission.COMMENT_UPDATE);
+    anbieter.requireSichtbar(userId, comment.cardId());
     boardQuelle.pruefeSchreibbar(projectId);
     // Bearbeiten darf nur der Autor selbst — auch ein Admin/Owner nicht fremde Kommentare.
     Long author = comment.authorUserId();
     if (author == null || author != userId) {
       throw new ProjectAccessDeniedException();
     }
+    ActorStamp stamp = actor.current();
+    pruefeKeineAntwortDesRechenzentrums(stamp, body);
     return view(
-        comments.save(
-            comment.withBody(body, laufStart, actor.current().originName(), clock.instant())));
+        comments.save(comment.withBody(body, laufStart, stamp.originName(), clock.instant())));
   }
 
   @Transactional
@@ -273,14 +398,21 @@ public class CommentService {
 
   /**
    * Die Kommentare der Karten mit Herkunft und Hand-Marke für die Entscheidungskette (Issue #2109,
-   * Plan #2108 E3, E4), chronologisch.
+   * Plan #2108 E3, E4), chronologisch. Ohne {@link Permission#REPAIR_READ} fehlen Kommentare
+   * verborgener Karten und nicht grüne Kartenprüfungen (Issue #2214).
    *
-   * <p>Ohne Rechteprüfung: Vertrag für die Kette, die das Leserecht vor dem Aufruf selbst prüft und
-   * die Karten auf das Projekt der geöffneten Karte begrenzt.
+   * <p>Ohne Prüfung der Mitgliedschaft: Vertrag für die Kette, die das Leserecht vor dem Aufruf
+   * selbst prüft und die Karten auf das Projekt der geöffneten Karte begrenzt.
+   *
+   * @param projectId Projekt der geöffneten Karte; nach ihm richtet sich das Recht auf Störungen
    */
   @Transactional(readOnly = true)
-  public List<KettenKommentarView> kettenKommentare(Collection<Long> cardIds) {
+  public List<KettenKommentarView> kettenKommentare(
+      long userId, long projectId, Collection<Long> cardIds) {
+    boolean stoerungen = anbieter.siehtStoerungen(userId, projectId);
+    Set<Long> verborgeneKarten = anbieter.verborgeneKartenIds(userId, projectId);
     return comments.findKettenKommentare(cardIds).stream()
+        .filter(c -> !verborgen(stoerungen, verborgeneKarten, c.cardId(), c.body()))
         .map(
             c ->
                 new KettenKommentarView(
@@ -314,7 +446,8 @@ public class CommentService {
    * Je Karte des Boards der erste Kommentar, der den Suchbegriff enthält (Plan #1574, E3, E16) —
    * für die Textsuche der Kanban-Strecke. Erfordert Projekt-Mitgliedschaft (Leserecht); die Abfrage
    * bleibt auf Karten dieses Projekts und Boards ohne Papierkorb begrenzt, sodass ein Board eines
-   * anderen Projekts nichts liefert.
+   * anderen Projekts nichts liefert. Ohne {@link Permission#REPAIR_READ} fehlen Treffer an
+   * verborgenen Karten und in nicht grünen Kartenprüfungen (Issue #2214).
    *
    * @param q Suchbegriff, getrimmt und nicht leer
    */
@@ -322,7 +455,10 @@ public class CommentService {
   public List<KommentarTrefferView> trefferAufBoard(
       long userId, long projectId, long boardId, String q) {
     permissions.requireMembership(userId, projectId);
+    boolean stoerungen = anbieter.siehtStoerungen(userId, projectId);
+    Set<Long> verborgeneKarten = anbieter.verborgeneKartenIds(userId, projectId);
     return comments.findFirstMatchPerCardOnBoard(projectId, boardId, q).stream()
+        .filter(c -> !verborgen(stoerungen, verborgeneKarten, c.cardId(), c.body()))
         .map(c -> new KommentarTrefferView(c.cardId(), c.requireId(), c.body()))
         .toList();
   }
@@ -338,7 +474,9 @@ public class CommentService {
         c.updatedAt(),
         c.origin(),
         c.tokenName(),
-        c.agent());
+        c.agent(),
+        c.zugangArt(),
+        c.vonKi());
   }
 
   /** Kommentardarstellung. */
@@ -371,7 +509,48 @@ public class CommentService {
               description =
                   "Modell-Selbstauskunft des Werkzeugs (Header X-Agent-Model); null ohne Angabe.",
               example = "claude-opus-5-5")
-          @Nullable String agent) {}
+          @Nullable String agent,
+      @Schema(
+              description =
+                  "Art des Zugangs beim Anlegen: STANDARD (gewöhnlicher Projekt-Zugang) oder APP"
+                      + " (Zugang der Desktop-App); null bei der Oberfläche und älteren"
+                      + " Kommentaren.",
+              example = "STANDARD")
+          @Nullable String zugangArt,
+      @Schema(
+              description =
+                  "Ob der Kommentar ein Beitrag der KI ist: angelegt über einen STANDARD-Zugang,"
+                      + " dessen Inhaber dabei Owner oder Admin des Projekts war.",
+              example = "false")
+          boolean vonKi) {
+
+    /** Ein Kommentar ohne Zugangsart, nicht von der KI — die bisherige Parameterliste (#2208). */
+    public CommentView(
+        Long id,
+        Long cardId,
+        @Nullable Long authorUserId,
+        String authorName,
+        String body,
+        Instant createdAt,
+        Instant updatedAt,
+        @Nullable String origin,
+        @Nullable String tokenName,
+        @Nullable String agent) {
+      this(
+          id,
+          cardId,
+          authorUserId,
+          authorName,
+          body,
+          createdAt,
+          updatedAt,
+          origin,
+          tokenName,
+          agent,
+          null,
+          false);
+    }
+  }
 
   /**
    * Eine Notiz an einer Karte im fremden System, wie der Spiegel sie übergibt (Issue #2162).

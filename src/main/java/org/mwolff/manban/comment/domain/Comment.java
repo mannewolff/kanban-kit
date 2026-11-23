@@ -3,6 +3,7 @@ package org.mwolff.manban.comment.domain;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.Identifiable;
+import org.mwolff.manban.common.KitMeldungen;
 
 /**
  * Kommentar an einer Karte.
@@ -26,6 +27,11 @@ import org.mwolff.manban.common.Identifiable;
  *     {@code null} ohne Änderung von Hand oder wenn jene Fassung keine solche Zeile trug
  * @param externKennung Kennung des Kommentars im fremden System, aus dem der Spiegel ihn übernommen
  *     hat (Issue #2162, Plan #2152 A1); {@code null} bei jedem eigenen Kommentar
+ * @param zugangArt Art des Zugangs beim Anlegen, {@code STANDARD} oder {@code APP} (Issue #2208,
+ *     Plan #2206 E6); {@code null} bei der Sitzung, bei Altzeilen und gespiegelten Kommentaren
+ * @param vonKi ob der Kommentar ein Beitrag der KI ist: angelegt über einen Zugang der Art {@code
+ *     STANDARD}, dessen Inhaber dabei echter OWNER oder ADMIN war (Plan #2206 E6). Steht beim
+ *     Anlegen fest und bleibt bei jeder Änderung.
  */
 public record Comment(
     @Nullable Long id,
@@ -41,11 +47,48 @@ public record Comment(
     @Nullable String agent,
     @Nullable Instant vonHandGeaendertAm,
     @Nullable String vonHandKopfzeile,
-    @Nullable String externKennung)
+    @Nullable String externKennung,
+    @Nullable String zugangArt,
+    boolean vonKi)
     implements Identifiable {
 
   private static final String HERKUNFT_TOKEN = "TOKEN";
   private static final String HERKUNFT_SESSION = "SESSION";
+
+  /** Ein Kommentar ohne Zugangsart, nicht von der KI — die bisherige Parameterliste (#2208). */
+  public Comment(
+      @Nullable Long id,
+      Long cardId,
+      @Nullable Long authorUserId,
+      String authorName,
+      String body,
+      Instant createdAt,
+      Instant updatedAt,
+      @Nullable Instant laufStart,
+      @Nullable String origin,
+      @Nullable String tokenName,
+      @Nullable String agent,
+      @Nullable Instant vonHandGeaendertAm,
+      @Nullable String vonHandKopfzeile,
+      @Nullable String externKennung) {
+    this(
+        id,
+        cardId,
+        authorUserId,
+        authorName,
+        body,
+        createdAt,
+        updatedAt,
+        laufStart,
+        origin,
+        tokenName,
+        agent,
+        vonHandGeaendertAm,
+        vonHandKopfzeile,
+        externKennung,
+        null,
+        false);
+  }
 
   /** Ein eigener Kommentar, nicht gespiegelt — die bisherige Parameterliste (Issue #2162). */
   public Comment(
@@ -167,7 +210,9 @@ public record Comment(
         agent,
         vonHand ? geaendertAm : vonHandGeaendertAm,
         vonHand ? kopfzeileBeimKennzeichnen() : vonHandKopfzeile,
-        externKennung);
+        externKennung,
+        zugangArt,
+        vonKi);
   }
 
   /**
@@ -195,7 +240,9 @@ public record Comment(
         agent,
         zeitpunkt,
         kopfzeileBeimKennzeichnen(),
-        externKennung);
+        externKennung,
+        zugangArt,
+        vonKi);
   }
 
   /**
@@ -203,6 +250,17 @@ public record Comment(
    */
   private @Nullable String kopfzeileBeimKennzeichnen() {
     return vonHandGeaendertAm != null ? vonHandKopfzeile : erstZeile(body);
+  }
+
+  /**
+   * Ob der Kopf des Texts eine Antwort ist (Issue #2208, Plan #2206 E7). Kopf ist die erste
+   * nichtleere Zeile; erkannt wird wie beim Auswerten über {@link KitMeldungen.Zeile#ANTWORT}, ohne
+   * Rücksicht auf führenden Leerraum und Schreibung. Es zählt jede Zeile, die so beginnt, auch mit
+   * Text dahinter: Eine Sperre auf dieser Prüfung ist damit weiter als jede Erkennung einer
+   * Antwort.
+   */
+  public static boolean kopfIstAntwort(String text) {
+    return KitMeldungen.Zeile.ANTWORT.rest(erstZeile(text)).isPresent();
   }
 
   private static @Nullable String erstZeile(String text) {
@@ -241,7 +299,9 @@ public record Comment(
         agent,
         vonHand ? jetzt : null,
         vonHand ? kopfzeileDerKitFassung() : null,
-        externKennung);
+        externKennung,
+        zugangArt,
+        vonKi);
   }
 
   private @Nullable String kopfzeileDerKitFassung() {

@@ -4,15 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.RecordComponent;
 import java.time.Instant;
+import java.util.Arrays;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.fremdboard.application.FremdBoardStand;
 import org.mwolff.manban.fremdboard.application.VerbindungAnsicht;
 import org.mwolff.manban.fremdboard.application.VerbindungService;
 import org.mwolff.manban.fremdboard.domain.FremdBoardArt;
 import org.mwolff.manban.fremdboard.domain.StatusLabels;
 import org.mwolff.manban.fremdboard.web.FremdBoardController.FremdBoardRequest;
+import org.mwolff.manban.fremdboard.web.FremdBoardController.FremdBoardStandView;
 import org.mwolff.manban.fremdboard.web.FremdBoardController.FremdBoardView;
 import org.mwolff.manban.fremdboard.web.FremdBoardController.Statuslabels;
 
@@ -109,6 +113,32 @@ class FremdBoardControllerTest {
     assertThat(view.angebunden()).isFalse();
     assertThat(view.schluesselGesetzt()).isTrue();
     assertThat(view.zugangLesbar()).isFalse();
+  }
+
+  @Test
+  void standBildetDieVierFelderAb() {
+    Instant stand = Instant.parse("2026-11-23T09:58:00Z");
+    when(service.stand(3L, 7L))
+        .thenReturn(new FremdBoardStand(true, FremdBoardArt.GITLAB, stand, true));
+
+    assertThat(controller.stand(3L, 7L))
+        .isEqualTo(new FremdBoardStandView(true, FremdBoardArt.GITLAB, stand, true));
+  }
+
+  @Test
+  void standOhneVerbindungBleibtLeer() {
+    when(service.stand(3L, 7L)).thenReturn(FremdBoardStand.ohne());
+
+    assertThat(controller.stand(3L, 7L))
+        .isEqualTo(new FremdBoardStandView(false, null, null, false));
+  }
+
+  @Test
+  void standTraegtGenauDieVierFelder() {
+    assertThat(
+            Arrays.stream(FremdBoardStandView.class.getRecordComponents())
+                .map(RecordComponent::getName))
+        .containsExactly("imFremdsystem", "art", "standAm", "abgleichGescheitert");
   }
 
   private static FremdBoardRequest anfrage(String zugang, @Nullable Statuslabels statuslabels) {

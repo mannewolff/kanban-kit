@@ -39,6 +39,8 @@ class KitNamenTest {
           new Zeile(Sache.REPARATUR, "kit:repair", null, Schutz.KEINER),
           new Zeile(Sache.HOTFIX, "kit:hotfix", null, Schutz.KEINER),
           new Zeile(Sache.MANUELL, "kit:manuell", "kit:manual", Schutz.NUR_MENSCH),
+          new Zeile(Sache.ANBIETER, "kit:provider", null, Schutz.KEINER),
+          new Zeile(Sache.FREIGABE, "kit:approval", null, Schutz.KEINER),
           new Zeile(Sache.LAUF_ABGEBROCHEN, "lauf:abgebrochen", "run:aborted", Schutz.KEINER),
           new Zeile(Sache.LAUF_LAEUFT, "lauf:laeuft", "run:running", Schutz.KEINER),
           new Zeile(Sache.LAUF_WARTET, "lauf:wartet", "run:waiting", Schutz.KEINER),
@@ -82,8 +84,8 @@ class KitNamenTest {
   }
 
   @Test
-  void standard_hatFuenfundzwanzigSachen() {
-    assertThat(Sache.values()).hasSize(25);
+  void standard_hatSiebenundzwanzigSachen() {
+    assertThat(Sache.values()).hasSize(27);
   }
 
   @Test
@@ -141,6 +143,8 @@ class KitNamenTest {
             Sache.NIGHTISSUES,
             Sache.REPARATUR,
             Sache.HOTFIX,
+            Sache.ANBIETER,
+            Sache.FREIGABE,
             Sache.REVIEW_OFFEN,
             Sache.PLANREVIEW_1,
             Sache.PLANREVIEW_2);
@@ -149,6 +153,15 @@ class KitNamenTest {
     }
     assertThat(Arrays.stream(Sache.values()).filter(s -> !ohneGegenstueck.contains(s)))
         .allSatisfy(s -> assertThat(KitNamen.STANDARD.namen(s)).hasSize(2));
+  }
+
+  @Test
+  void anbieterUndFreigabe_loesenAufIhreSacheAufUndTragenKeinenSchutz() {
+    // Issue #2208, Plan #2206 E17: das Rechenzentrum setzt und nimmt beide ab.
+    assertThat(KitNamen.STANDARD.sache("kit:provider")).contains(Sache.ANBIETER);
+    assertThat(KitNamen.STANDARD.sache("kit:approval")).contains(Sache.FREIGABE);
+    assertThat(Sache.ANBIETER.schutz()).isEqualTo(Schutz.KEINER);
+    assertThat(Sache.FREIGABE.schutz()).isEqualTo(Schutz.KEINER);
   }
 
   @Test
@@ -173,7 +186,7 @@ class KitNamenTest {
     assertThat(KitNamen.STANDARD.alleNamen())
         .containsExactlyElementsOf(
             KitNamen.STANDARD.eintraege().stream().map(Eintrag::name).toList())
-        .hasSize(40)
+        .hasSize(42)
         .startsWith("kit:durchziehen", "kit:carry-through", "kit:geschuetzt")
         .endsWith("planreview:1", "planreview:2");
   }

@@ -60,6 +60,10 @@ public final class KitNamen {
     REPARATUR(Schutz.KEINER),
     HOTFIX(Schutz.KEINER),
     MANUELL(Schutz.NUR_MENSCH),
+    /** Die Karte steht beim Anbieter in Arbeit; das Rechenzentrum setzt und nimmt ab (#2208). */
+    ANBIETER(Schutz.KEINER),
+    /** Eine Freigabe des Kunden steht aus; das Rechenzentrum setzt und nimmt ab (#2208). */
+    FREIGABE(Schutz.KEINER),
     LAUF_ABGEBROCHEN(Schutz.KEINER),
     LAUF_LAEUFT(Schutz.KEINER),
     LAUF_WARTET(Schutz.KEINER),
@@ -130,6 +134,8 @@ public final class KitNamen {
               new Eintrag(Sache.HOTFIX, "kit:hotfix"),
               new Eintrag(Sache.MANUELL, "kit:manuell"),
               new Eintrag(Sache.MANUELL, "kit:manual"),
+              new Eintrag(Sache.ANBIETER, "kit:provider"),
+              new Eintrag(Sache.FREIGABE, "kit:approval"),
               new Eintrag(Sache.LAUF_ABGEBROCHEN, "lauf:abgebrochen"),
               new Eintrag(Sache.LAUF_ABGEBROCHEN, "run:aborted"),
               new Eintrag(Sache.LAUF_LAEUFT, "lauf:laeuft"),

@@ -3,6 +3,7 @@ package org.mwolff.manban.fremdboard.infrastructure.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -13,6 +14,7 @@ import javax.sql.DataSource;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.fremdboard.application.FremdBoardStand;
 import org.mwolff.manban.fremdboard.application.VerbindungRepository;
 import org.mwolff.manban.fremdboard.domain.FremdBoardArt;
 import org.mwolff.manban.fremdboard.domain.StatusLabels;
@@ -192,14 +194,14 @@ class VerbindungRepositoryAdapterIT extends AbstractIntegrationTest {
             "nicht erreichbar");
     verbindungen.speichere(mitFehler);
 
-    verbindungen.abgleichGelungen(projekt.id(), null);
+    verbindungen.abgleichGelungen(projekt.id(), ABGLEICH, null);
 
     Verbindung inkrementell = verbindungen.finde(projekt.id()).orElseThrow();
     assertThat(inkrementell.letzterFehler()).isNull();
     assertThat(inkrementell.letzterVollabgleichAm()).isEqualTo(ANGEBUNDEN);
     assertThat(inkrementell.letzterAbgleichAm()).isEqualTo(ABGLEICH);
 
-    verbindungen.abgleichGelungen(projekt.id(), VOLLABGLEICH);
+    verbindungen.abgleichGelungen(projekt.id(), VOLLABGLEICH, VOLLABGLEICH);
 
     assertThat(verbindungen.finde(projekt.id()).orElseThrow().letzterVollabgleichAm())
         .isEqualTo(VOLLABGLEICH);
@@ -228,6 +230,110 @@ class VerbindungRepositoryAdapterIT extends AbstractIntegrationTest {
     Verbindung danach = verbindungen.finde(projekt.id()).orElseThrow();
     assertThat(danach.letzterAbgleichAm()).isEqualTo(VOLLABGLEICH);
     assertThat(danach.letzterFehler()).isEqualTo("nicht erreichbar");
+  }
+
+  @Test
+  void standAm_bleibtBeiAnspruchUndScheiternUnveraendert() {
+    Projekt projekt = projektMitBoard("OhneStand");
+    verbindungen.speichere(mitAbgleich(projekt, null));
+
+    verbindungen.beanspruchen(projekt.id(), null, ABGLEICH);
+    assertThat(standAm(projekt)).isNull();
+
+    verbindungen.abgleichGescheitert(projekt.id(), ABGLEICH, null, "nicht erreichbar");
+    assertThat(standAm(projekt)).isNull();
+  }
+
+  @Test
+  void standAm_folgtDemGelungenenAbgleich_undBleibtBeimScheiternStehen() {
+    Projekt projekt = projektMitBoard("MitStand");
+    verbindungen.speichere(mitAbgleich(projekt, null));
+    verbindungen.beanspruchen(projekt.id(), null, ABGLEICH);
+
+    verbindungen.abgleichGelungen(projekt.id(), ABGLEICH, ABGLEICH);
+    assertThat(standAm(projekt)).isEqualTo(ABGLEICH);
+
+    verbindungen.beanspruchen(projekt.id(), ABGLEICH, VOLLABGLEICH);
+    assertThat(standAm(projekt)).isEqualTo(ABGLEICH);
+    verbindungen.abgleichGescheitert(projekt.id(), VOLLABGLEICH, ABGLEICH, "nicht erreichbar");
+    assertThat(standAm(projekt)).isEqualTo(ABGLEICH);
+  }
+
+  @Test
+  void standAm_faelltBeiEinemAelterenAnspruchNichtZurueck() {
+    Projekt projekt = projektMitBoard("Aelter");
+    verbindungen.speichere(mitAbgleich(projekt, VOLLABGLEICH));
+    verbindungen.abgleichGelungen(projekt.id(), VOLLABGLEICH, null);
+
+    verbindungen.abgleichGelungen(projekt.id(), ABGLEICH, null);
+
+    assertThat(standAm(projekt)).isEqualTo(VOLLABGLEICH);
+  }
+
+  @Test
+  void speichern_laesstStandAmStehen() {
+    Projekt projekt = projektMitBoard("Gespeichert");
+    verbindungen.speichere(mitAbgleich(projekt, ABGLEICH));
+    verbindungen.abgleichGelungen(projekt.id(), ABGLEICH, ABGLEICH);
+
+    verbindungen.speichere(mitAbgleich(projekt, VOLLABGLEICH));
+
+    assertThat(standAm(projekt)).isEqualTo(ABGLEICH);
+  }
+
+  @Test
+  void stand_ohneVerbindungIstLeer() {
+    Projekt projekt = projektMitBoard("OhneAuskunft");
+
+    assertThat(verbindungen.stand(projekt.id())).isEmpty();
+  }
+
+  @Test
+  void stand_vorDemErstenAbgleich_ohneZeit() {
+    Projekt projekt = projektMitBoard("AuskunftNeu");
+    verbindungen.speichere(mitAbgleich(projekt, null));
+
+    assertThat(verbindungen.stand(projekt.id()))
+        .contains(new FremdBoardStand(true, FremdBoardArt.GITLAB, null, false));
+  }
+
+  @Test
+  void stand_nenntDieZeitDesGelungenenAbgleichs_undObDerLetzteScheiterte() {
+    Projekt projekt = projektMitBoard("AuskunftStand");
+    verbindungen.speichere(mitAbgleich(projekt, null));
+    verbindungen.beanspruchen(projekt.id(), null, ABGLEICH);
+    verbindungen.abgleichGelungen(projekt.id(), ABGLEICH, ABGLEICH);
+
+    assertThat(verbindungen.stand(projekt.id()))
+        .contains(new FremdBoardStand(true, FremdBoardArt.GITLAB, ABGLEICH, false));
+
+    verbindungen.beanspruchen(projekt.id(), ABGLEICH, VOLLABGLEICH);
+    verbindungen.abgleichGescheitert(projekt.id(), VOLLABGLEICH, ABGLEICH, "nicht erreichbar");
+
+    assertThat(verbindungen.stand(projekt.id()))
+        .contains(new FremdBoardStand(true, FremdBoardArt.GITLAB, ABGLEICH, true));
+  }
+
+  @Test
+  void stand_gescheitertOhneJeGelungenenAbgleich() {
+    Projekt projekt = projektMitBoard("AuskunftNie");
+    verbindungen.speichere(mitAbgleich(projekt, null));
+    verbindungen.beanspruchen(projekt.id(), null, ABGLEICH);
+    verbindungen.abgleichGescheitert(projekt.id(), ABGLEICH, null, "nicht erreichbar");
+
+    assertThat(verbindungen.stand(projekt.id()))
+        .contains(new FremdBoardStand(true, FremdBoardArt.GITLAB, null, true));
+  }
+
+  private @Nullable Instant standAm(Projekt projekt) {
+    return new JdbcTemplate(dataSource)
+        .queryForObject(
+            "SELECT stand_am FROM fremdboard_verbindung WHERE project_id = ?",
+            (rs, zeile) -> {
+              OffsetDateTime wert = rs.getObject("stand_am", OffsetDateTime.class);
+              return wert == null ? null : wert.toInstant();
+            },
+            projekt.id());
   }
 
   private static Verbindung mitAbgleich(Projekt projekt, @Nullable Instant letzterAbgleich) {

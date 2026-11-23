@@ -60,18 +60,7 @@ public class KanbanArchivService {
     long userId = principal.userId();
     BoardCardView karte = cardSearch.findOnBoardByNumber(userId, boardId, number);
     List<Comment> comments =
-        commentService.list(userId, karte.item().id()).stream()
-            .map(
-                c ->
-                    new Comment(
-                        c.id(),
-                        c.authorName(),
-                        c.body(),
-                        c.createdAt(),
-                        c.origin(),
-                        c.tokenName(),
-                        c.agent()))
-            .toList();
+        commentService.list(userId, karte.item().id()).stream().map(Comment::aus).toList();
     return new ItemDetail(
         compat.item(boardId, karte.item()),
         karte.archived(),

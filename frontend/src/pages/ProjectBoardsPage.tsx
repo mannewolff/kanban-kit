@@ -19,11 +19,14 @@ import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-r
 import { boardsApi, type Board } from '../api/boards'
 import { apiErrorMessage } from '../api/client'
 import { projectsApi } from '../api/projects'
+import { useAuth } from '../auth/AuthContext'
+import { IdeeEinstellenDialog } from '../components/anbieter/IdeeEinstellenDialog'
+import { WartetAufDich } from '../components/anbieter/WartetAufDich'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { VorschauGesperrt } from '../components/VorschauGesperrt'
 import { useT } from '../i18n/SpracheContext'
-import { canManageBoards, canManageMembers } from '../lib/roles'
+import { canEditCards, canManageBoards, canManageMembers } from '../lib/roles'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { SURFACE_HOVER_SHADOW, TABELLENZIFFERN } from '../theme'
 
@@ -35,6 +38,7 @@ export function ProjectBoardsPage() {
   const location = useLocation()
   const notify = useSnackbar()
   const t = useT()
+  const { user } = useAuth()
   const [boards, setBoards] = useState<Board[]>([])
   const [archived, setArchived] = useState<Board[]>([])
   const [role, setRole] = useState<string>('VIEWER')
@@ -43,6 +47,7 @@ export function ProjectBoardsPage() {
   const [confirmBoard, setConfirmBoard] = useState<Board | null>(null)
   const [purgeBoard, setPurgeBoard] = useState<Board | null>(null)
   const [purgeInput, setPurgeInput] = useState('')
+  const [ideeOffen, setIdeeOffen] = useState(false)
 
   const canManage = canManageBoards(role)
 
@@ -57,20 +62,29 @@ export function ProjectBoardsPage() {
       return
     }
     let active = true
-    void boardsApi.list(id).then((bs) => {
-      if (!active) return
-      setBoards(bs)
-      // Bei genau einem Board direkt in dessen Leitstand, die Startansicht des Boards (#979) — nur
-      // beim Erst-Aufruf oder in der Auto-Routing-Kette.
-      const auto = location.key === 'default' || (location.state as { autoRoute?: boolean } | null)?.autoRoute
-      if (bs.length === 1 && auto) {
-        navigate(`/boards/${bs[0].id}/leitstand`, { replace: true })
-      }
+    const boardListe = boardsApi.list(id)
+    const projekte = projectsApi.list()
+    void boardListe.then((bs) => {
+      if (active) setBoards(bs)
     })
+    // Bei genau einem Board direkt in dessen Leitstand, die Startansicht des Boards (#979) — nur
+    // beim Erst-Aufruf oder in der Auto-Routing-Kette. Die Weiterleitung wartet auf die Rolle und
+    // entfällt für den Kunden: Er sähe sonst nie, was auf ihn wartet (Issue #2218, Plan #2206 E14).
+    const auto = location.key === 'default' || (location.state as { autoRoute?: boolean } | null)?.autoRoute
+    if (auto) {
+      const ausAnmeldung = user?.memberships.find((m) => m.projectId === id)?.role
+      const rolle =
+        ausAnmeldung === undefined ? projekte.then((ps) => ps.find((p) => p.id === id)?.role) : Promise.resolve(ausAnmeldung)
+      void Promise.all([boardListe, rolle]).then(([bs, r]) => {
+        if (active && bs.length === 1 && r !== undefined && r !== 'CUSTOMER') {
+          navigate(`/boards/${bs[0].id}/leitstand`, { replace: true })
+        }
+      })
+    }
     void boardsApi.listArchived(id).then((arch) => {
       if (active) setArchived(arch)
     })
-    void projectsApi.list().then((projects) => {
+    void projekte.then((projects) => {
       if (!active) return
       const project = projects.find((p) => p.id === id)
       if (project) {
@@ -81,7 +95,7 @@ export function ProjectBoardsPage() {
     return () => {
       active = false
     }
-    // location/navigate bewusst nicht in den Deps: der Single-Board-Auto-Redirect soll nur
+    // location/navigate/user bewusst nicht in den Deps: der Single-Board-Auto-Redirect soll nur
     // bei Projektwechsel (id) greifen, nicht bei jeder Navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, validId])
@@ -169,10 +183,22 @@ export function ProjectBoardsPage() {
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Breadcrumbs items={[{ label: t.RAHMEN.NAV_PROJEKTE, to: '/projects' }, { label: projectName || t.RAHMEN.NAV_PROJEKT }]} />
-        {canManageMembers(role) && (
-          <Link component={RouterLink} to={`/projects/${id}/members`}>{t.RAHMEN.NAV_MITGLIEDER}</Link>
-        )}
+        <Stack direction="row" spacing={2} alignItems="center">
+          {/* Eine Idee mit Anhängen einstellen (Issue #2220, Plan #2206 E13): wer Karten anlegen darf. */}
+          {canEditCards(role) && boards.length > 0 && (
+            <VorschauGesperrt>
+              <Button variant="contained" size="small" onClick={() => setIdeeOffen(true)}>
+                {t.IDEE_EINSTELLEN.KNOPF}
+              </Button>
+            </VorschauGesperrt>
+          )}
+          {canManageMembers(role) && (
+            <Link component={RouterLink} to={`/projects/${id}/members`}>{t.RAHMEN.NAV_MITGLIEDER}</Link>
+          )}
+        </Stack>
       </Stack>
+
+      <WartetAufDich projectId={id} />
 
       {canManage && (
         <Box component="form" onSubmit={handleCreate} sx={{ mb: 3 }}>
@@ -278,6 +304,14 @@ export function ProjectBoardsPage() {
             ))}
           </Stack>
         </Box>
+      )}
+
+      {ideeOffen && (
+        <IdeeEinstellenDialog
+          boards={boards}
+          onClose={() => setIdeeOffen(false)}
+          onEingestellt={() => notify(t.IDEE_EINSTELLEN.EINGESTELLT, 'success')}
+        />
       )}
 
       <Dialog open={confirmBoard !== null} onClose={() => setConfirmBoard(null)}>

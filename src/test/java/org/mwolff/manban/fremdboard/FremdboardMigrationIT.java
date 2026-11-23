@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 import org.flywaydb.core.Flyway;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -15,11 +16,14 @@ import org.testcontainers.containers.PostgreSQLContainer;
 /**
  * Verifiziert {@code V75__fremdboard.sql} (Issue #2156, Plan #2152): Die Migration läuft auf einer
  * leeren und auf einer bestehenden Datenbank, legt Verbindung und Ereignissperre an und ergänzt die
- * drei Spalten, ohne den Bestand anzufassen.
+ * drei Spalten, ohne den Bestand anzufassen. Dazu {@code V82__fremdboard_stand_am.sql} (Issue
+ * #2222, Plan #2221 E4): Die neue Spalte {@code stand_am} übernimmt {@code letzter_abgleich_am}
+ * nur, wo schon ein Vollabgleich gelang.
  *
  * <p>Eigener Container statt {@link org.mwolff.manban.AbstractIntegrationTest}: Der Bestand muss
- * vor {@code V75} stehen, und deren Reset leerte ihn vor jeder Methode. Die beiden Fälle laufen je
- * in einer eigenen Datenbank desselben Containers.
+ * vor {@code V75} bzw. {@code V82} stehen, und deren Reset leerte ihn vor jeder Methode. Die drei
+ * Fälle laufen je in einer eigenen Datenbank desselben Containers; die beiden ersten bleiben bei
+ * {@code V75}, damit der Spaltentest genau deren Stand prüft.
  */
 class FremdboardMigrationIT {
 
@@ -30,6 +34,10 @@ class FremdboardMigrationIT {
   private static JdbcTemplate bestand;
   private static long bestandsKarte;
   private static long bestandsProjekt;
+  private static JdbcTemplate stand;
+  private static long mitVollabgleich;
+  private static long nurAbgleich;
+  private static long ohneAbgleich;
 
   static {
     POSTGRES.start();
@@ -50,6 +58,66 @@ class FremdboardMigrationIT {
     migriere(bestandsQuelle, "74");
     seedeBestand();
     migriere(bestandsQuelle, "75");
+
+    wurzel.execute("CREATE DATABASE fremdboard_stand");
+    DriverManagerDataSource standQuelle = datenquelle("fremdboard_stand");
+    stand = new JdbcTemplate(standQuelle);
+    migriere(standQuelle, "81");
+    long besitzer =
+        idIn(
+            stand,
+            "INSERT INTO app_user (email, display_name) VALUES ('s@example.com', 'S')"
+                + " RETURNING id");
+    mitVollabgleich =
+        verbindungMitAbgleich("Voll", besitzer, "2026-11-20T10:00:00Z", "2026-11-20T09:00:00Z");
+    nurAbgleich = verbindungMitAbgleich("Nur", besitzer, "2026-11-20T10:00:00Z", null);
+    ohneAbgleich = verbindungMitAbgleich("Ohne", besitzer, null, null);
+    migriere(standQuelle, "82");
+  }
+
+  @Test
+  void v82_setztStandAmNurBeiEinerVerbindungMitVollabgleich_aufIhrenLetztenAbgleich() {
+    assertThat(standAm(mitVollabgleich)).isEqualTo("2026-11-20T10:00:00Z");
+    assertThat(standAm(nurAbgleich)).isNull();
+    assertThat(standAm(ohneAbgleich)).isNull();
+    assertThat(datentyp(stand, "fremdboard_verbindung", "stand_am"))
+        .isEqualTo("timestamp with time zone");
+    assertThat(nullbar(stand, "fremdboard_verbindung", "stand_am")).isEqualTo("YES");
+  }
+
+  private static @Nullable String standAm(long projekt) {
+    return stand.queryForObject(
+        "SELECT to_char(stand_am AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')"
+            + " FROM fremdboard_verbindung WHERE project_id = ?",
+        String.class,
+        projekt);
+  }
+
+  /**
+   * Legt in der Datenbank {@code stand} Projekt, Board und Verbindung an; liefert die Projekt-Id.
+   */
+  private static long verbindungMitAbgleich(
+      String name, long besitzer, @Nullable String letzterAbgleich, @Nullable String letzterVoll) {
+    long projekt =
+        idIn(
+            stand,
+            "INSERT INTO project (name, owner_user_id) VALUES (?, ?) RETURNING id",
+            name,
+            besitzer);
+    long board =
+        idIn(stand, "INSERT INTO board (project_id, name) VALUES (?, 'B') RETURNING id", projekt);
+    stand.update(
+        "INSERT INTO fremdboard_verbindung (project_id, art, basis_url, projekt_pfad,"
+            + " zugang_verschluesselt, statuslabels, board_id, angebunden_am,"
+            + " letzter_abgleich_am, letzter_vollabgleich_am)"
+            + " VALUES (?, 'GITLAB', 'https://gitlab.com', 'gruppe/projekt', 'geheim',"
+            + " '{\"ready\":\"Ready\"}'::jsonb, ?, now(),"
+            + " CAST(? AS timestamptz), CAST(? AS timestamptz))",
+        projekt,
+        board,
+        letzterAbgleich,
+        letzterVoll);
+    return projekt;
   }
 
   @Test
@@ -235,7 +303,11 @@ class FremdboardMigrationIT {
   }
 
   private static long id(String sql, Object... argumente) {
-    Long erzeugt = bestand.queryForObject(sql, Long.class, argumente);
+    return idIn(bestand, sql, argumente);
+  }
+
+  private static long idIn(JdbcTemplate jdbc, String sql, Object... argumente) {
+    Long erzeugt = jdbc.queryForObject(sql, Long.class, argumente);
     return erzeugt == null ? 0L : erzeugt;
   }
 

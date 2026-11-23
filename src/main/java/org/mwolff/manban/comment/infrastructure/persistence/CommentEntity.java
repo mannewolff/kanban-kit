@@ -10,6 +10,9 @@ import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 
 /** JPA-Abbildung der Tabelle {@code comment}. */
+// PMD.TooManyFields: je Spalte der Tabelle ein Feld; mit dem Absender (Issue #2208) sind es 16.
+// Eine Aufteilung in eingebettete Teile änderte nur die Abbildung, nicht die Tabelle.
+@SuppressWarnings("PMD.TooManyFields")
 @Entity
 @Table(name = "comment")
 class CommentEntity {
@@ -61,6 +64,13 @@ class CommentEntity {
   @Column(name = "extern_kennung")
   private @Nullable String externKennung;
 
+  // Absender beim Anlegen (Issue #2208); V78, Altzeilen leer bzw. false.
+  @Column(name = "zugang_art")
+  private @Nullable String zugangArt;
+
+  @Column(name = "von_ki", nullable = false)
+  private boolean vonKi;
+
   protected CommentEntity() {
     // für JPA
   }
@@ -79,7 +89,9 @@ class CommentEntity {
       @Nullable String agent,
       @Nullable Instant vonHandGeaendertAm,
       @Nullable String vonHandKopfzeile,
-      @Nullable String externKennung) {
+      @Nullable String externKennung,
+      @Nullable String zugangArt,
+      boolean vonKi) {
     this.id = id;
     this.cardId = cardId;
     this.authorUserId = authorUserId;
@@ -94,6 +106,8 @@ class CommentEntity {
     this.vonHandGeaendertAm = vonHandGeaendertAm;
     this.vonHandKopfzeile = vonHandKopfzeile;
     this.externKennung = externKennung;
+    this.zugangArt = zugangArt;
+    this.vonKi = vonKi;
   }
 
   @Nullable Long getId() {
@@ -150,5 +164,13 @@ class CommentEntity {
 
   @Nullable String getExternKennung() {
     return externKennung;
+  }
+
+  @Nullable String getZugangArt() {
+    return zugangArt;
+  }
+
+  boolean isVonKi() {
+    return vonKi;
   }
 }

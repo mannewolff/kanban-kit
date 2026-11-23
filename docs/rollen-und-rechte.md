@@ -5,7 +5,7 @@ kanban-kit hat **zwei** Rollen-Ebenen. Sie werden oft verwechselt — deshalb zu
 | Ebene | Werte | Gültigkeit | Wo sichtbar |
 |------|-------|------------|-------------|
 | **Plattform-Rolle** | `USER`, `ADMIN` | instanzweit (ganzes System) | „Admin"-Bereich / Seitenleiste |
-| **Projekt-Rolle** | `OWNER`, `ADMIN`, `MEMBER`, `VIEWER` | pro Projekt (Mitgliedschaft) | Mitglieder-Seite eines Projekts |
+| **Projekt-Rolle** | `OWNER`, `ADMIN`, `MEMBER`, `CUSTOMER`, `VIEWER` | pro Projekt (Mitgliedschaft) | Mitglieder-Seite eines Projekts |
 
 Ein Nutzer kann also plattformweit **USER** sein und in *seinem* Projekt trotzdem **OWNER** — beides ist
 unabhängig. Die Mitglieder-Seite zeigt ausschließlich die **Projekt-Rolle**.
@@ -14,7 +14,7 @@ unabhängig. Die Mitglieder-Seite zeigt ausschließlich die **Projekt-Rolle**.
 
 Die Rechte sind granular als **CRUD-Matrix pro Ressource** modelliert (je Ressource und Operation ein
 Recht). Der Schlüssel in der zweiten Spalte ist der technische Name des Rechts — er taucht so in der
-`/roles`-Ansicht der App auf. Für die vier eingebauten Rollen sind die Rechte fest gesetzt.
+`/roles`-Ansicht der App auf. Für die fünf eingebauten Rollen sind die Rechte fest gesetzt.
 
 **Jede Zeile der Tabelle trägt einen Schlüssel** (Issue #1165). Das ist keine Formalie: Die
 `/roles`-Ansicht rendert ausschließlich, was `GET /api/roles/matrix` liefert, und dort steht nur, was
@@ -23,43 +23,46 @@ die Regel (siehe [Woher die Matrix kommt](#woher-die-matrix-kommt)). Was an kein
 hängt, gehört deshalb nicht in die Tabelle, sondern unter [Sonderregeln](#sonderregeln) bzw.
 [Plattform-Rollen](#plattform-rollen).
 
-| Recht | Schlüssel | VIEWER | MEMBER | ADMIN | OWNER |
-|-------|-----------|:------:|:------:|:-----:|:-----:|
-| Boards und Spalten lesen | `BOARD_READ` | ✓ | ✓ | ✓ | ✓ |
-| Board anlegen | `BOARD_CREATE` | – | – | ✓ | ✓ |
-| Board umbenennen, Spalten und Board-Labels verwalten | `BOARD_UPDATE` | – | – | ✓ | ✓ |
-| Board archivieren / löschen, Karte endgültig löschen | `BOARD_DELETE` | – | – | ✓ | ✓ |
-| Vorhaben lesen | `EPIC_READ` | ✓ | ✓ | ✓ | ✓ |
-| Vorhaben anlegen | `EPIC_CREATE` | – | ✓ | ✓ | ✓ |
-| Vorhaben bearbeiten | `EPIC_UPDATE` | – | ✓ | ✓ | ✓ |
-| Vorhaben archivieren / in den Papierkorb legen | `EPIC_DELETE` | – | ✓ | ✓ | ✓ |
-| Karten lesen (inkl. Dashboard, Papierkorb) | `TICKET_READ` | ✓ | ✓ | ✓ | ✓ |
-| Karte anlegen, Spezifikation einlesen | `TICKET_CREATE` | – | ✓ | ✓ | ✓ |
-| Karte bearbeiten (Titel, Text, Zuständige, Fälligkeit, Labels) | `TICKET_UPDATE` | – | ✓ | ✓ | ✓ |
-| Nacht-Kette an der Stufenleiste: Ziel und Prüferzahl wählen, Kette starten, Start zurücknehmen | `TICKET_UPDATE` | – | ✓ | ✓ | ✓ |
-| Kettenstand an der Stufenleiste einer Karte lesen | `TICKET_READ` | ✓ | ✓ | ✓ | ✓ |
-| Karte archivieren, in den Papierkorb legen, wiederherstellen | `TICKET_DELETE` | – | ✓ | ✓ | ✓ |
-| Karte verschieben — Spalte, **anderes Board desselben Projekts**; Spalte nach Kartennummer sortieren; Status eines Arbeitspakets setzen (`PUT /api/cards/{cardId}/status`) | `CARD_MOVE` | – | ✓ | ✓ | ✓ |
-| **Karte in ein anderes Projekt verschieben** — OWNER in **beiden** Projekten | `CARD_MOVE_PROJECT` | – | – | – | ✓ |
-| Kommentare lesen | `COMMENT_READ` | ✓ | ✓ | ✓ | ✓ |
-| Kommentar schreiben | `COMMENT_CREATE` | – | ✓ | ✓ | ✓ |
-| Kommentar bearbeiten *(nur eigenen)* | `COMMENT_UPDATE` | – | ✓ | ✓ | ✓ |
-| Kommentar löschen *(Moderation)* | `COMMENT_DELETE` | – | – | ✓ | ✓ |
-| Anhänge lesen / herunterladen | `ATTACHMENT_READ` | ✓ | ✓ | ✓ | ✓ |
-| Anhang hochladen | `ATTACHMENT_CREATE` | – | ✓ | ✓ | ✓ |
-| Anhang löschen | `ATTACHMENT_DELETE` | – | ✓ | ✓ | ✓ |
-| Mitglied einladen | `MEMBER_INVITE` | – | – | ✓ | ✓ |
-| Mitglied entfernen, Rolle oder Anzeigename ändern | `MEMBER_REMOVE` | – | – | ✓ | ✓ |
-| Projekt umbenennen, Karten-Startnummer setzen | `PROJECT_EDIT` | – | – | – | ✓ |
-| Eigentümerschaft übertragen | `PROJECT_OWNER_TRANSFER` | – | – | – | ✓ |
-| **Auswertung der Läufe lesen** — Plattform-Admin auch ohne OWNER, aber nur bei Teilnahme am Plattform-Leitstand | `NIGHT_RUN_READ` | – | – | – | ✓ |
-| Übersicht „Heute Nacht“ und Morgenkachel „Veröffentlichung vorbereitet“ auf der Runner-Seite sehen — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | ✓ |
-| Bereich „Runner jetzt“ auf der Runner-Seite sehen — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | ✓ |
-| Platte „Nacharbeit“ im Board-Leitstand sehen (`GET /api/boards/{boardId}/night-run-rework`, `requireNightRunAccess`) — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | ✓ |
-| Platte „Auslieferung“ im Board-Leitstand lesen (`GET /api/boards/{boardId}/dashboard/delivery`, `requireMembership`) — geprüft wird die Projektmitgliedschaft wie beim übrigen Leitstand, also jede Rolle, die das Board lesen darf; zeigt die Daten des ganzen Projekts | `BOARD_READ` | ✓ | ✓ | ✓ | ✓ |
-| Abschnitt „Wartegrund“ im Kartendialog eines Pakets in Ready sehen — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | ✓ |
-| Läufe in der [mobilen Oberfläche](nutzung.md#unterwegs) unter `/mobil/laeufe` sehen (`GET /api/mobil/laeufe`, `GET /api/mobil/laeufe/{laufId}`) — die mobile Sicht folgt genau dem Recht, Läufe im Leitstand zu sehen: Wer sie dort nicht sieht, sieht sie auch mobil nicht, und ein solcher Lauf antwortet mit 404 wie ein unbekannter | `NIGHT_RUN_READ` | – | – | – | ✓ |
-| **Protokoll eines Laufs hineingeben** — der Plattform-Admin immer | `NIGHT_RUN_SUBMIT` | – | – | – | ✓ |
+| Recht | Schlüssel | VIEWER | CUSTOMER | MEMBER | ADMIN | OWNER |
+|-------|-----------|:------:|:--------:|:------:|:-----:|:-----:|
+| Boards und Spalten lesen | `BOARD_READ` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Board anlegen | `BOARD_CREATE` | – | – | – | ✓ | ✓ |
+| Board umbenennen, Spalten und Board-Labels verwalten | `BOARD_UPDATE` | – | – | – | ✓ | ✓ |
+| Board archivieren / löschen, Karte endgültig löschen | `BOARD_DELETE` | – | – | – | ✓ | ✓ |
+| Vorhaben lesen | `EPIC_READ` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Vorhaben anlegen | `EPIC_CREATE` | – | ✓ | ✓ | ✓ | ✓ |
+| Vorhaben bearbeiten | `EPIC_UPDATE` | – | ✓ | ✓ | ✓ | ✓ |
+| Vorhaben archivieren / in den Papierkorb legen | `EPIC_DELETE` | – | ✓ | ✓ | ✓ | ✓ |
+| Karten lesen (inkl. Dashboard, Papierkorb) | `TICKET_READ` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Karte anlegen, Spezifikation einlesen | `TICKET_CREATE` | – | ✓ | ✓ | ✓ | ✓ |
+| Karte bearbeiten (Titel, Text, Zuständige, Fälligkeit, Labels) | `TICKET_UPDATE` | – | ✓ | ✓ | ✓ | ✓ |
+| Nacht-Kette an der Stufenleiste: Ziel und Prüferzahl wählen, Kette starten, Start zurücknehmen | `TICKET_UPDATE` | – | ✓ | ✓ | ✓ | ✓ |
+| Kettenstand an der Stufenleiste einer Karte lesen | `TICKET_READ` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Karte archivieren, in den Papierkorb legen, wiederherstellen | `TICKET_DELETE` | – | ✓ | ✓ | ✓ | ✓ |
+| **Störungen beim Anbieter sehen** — Reparaturkarten und Kartenprüfungen, deren Ergebnis nicht grün ist | `REPAIR_READ` | ✓ | – | ✓ | ✓ | ✓ |
+| Karte verschieben — Spalte, **anderes Board desselben Projekts**; Spalte nach Kartennummer sortieren; Status eines Arbeitspakets setzen (`PUT /api/cards/{cardId}/status`) | `CARD_MOVE` | – | ✓ | ✓ | ✓ | ✓ |
+| **Karte in ein anderes Projekt verschieben** — OWNER in **beiden** Projekten | `CARD_MOVE_PROJECT` | – | – | – | – | ✓ |
+| Kommentare lesen | `COMMENT_READ` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Kommentar schreiben | `COMMENT_CREATE` | – | ✓ | ✓ | ✓ | ✓ |
+| Kommentar bearbeiten *(nur eigenen)* | `COMMENT_UPDATE` | – | ✓ | ✓ | ✓ | ✓ |
+| Kommentar löschen *(Moderation)* | `COMMENT_DELETE` | – | – | – | ✓ | ✓ |
+| Anhänge lesen / herunterladen | `ATTACHMENT_READ` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Anhang hochladen | `ATTACHMENT_CREATE` | – | ✓ | ✓ | ✓ | ✓ |
+| Anhang löschen | `ATTACHMENT_DELETE` | – | ✓ | ✓ | ✓ | ✓ |
+| Mitglied einladen | `MEMBER_INVITE` | – | – | – | ✓ | ✓ |
+| Mitglied entfernen, Rolle oder Anzeigename ändern | `MEMBER_REMOVE` | – | – | – | ✓ | ✓ |
+| Projekt umbenennen, Karten-Startnummer setzen | `PROJECT_EDIT` | – | – | – | – | ✓ |
+| Eigentümerschaft übertragen | `PROJECT_OWNER_TRANSFER` | – | – | – | – | ✓ |
+| **Auswertung der Läufe lesen** — Plattform-Admin auch ohne OWNER, aber nur bei Teilnahme am Plattform-Leitstand | `NIGHT_RUN_READ` | – | – | – | – | ✓ |
+| Übersicht „Heute Nacht“ und Morgenkachel „Veröffentlichung vorbereitet“ auf der Runner-Seite sehen — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | – | ✓ |
+| Bereich „Runner jetzt“ auf der Runner-Seite sehen — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | – | ✓ |
+| Platte „Nacharbeit“ im Board-Leitstand sehen (`GET /api/boards/{boardId}/night-run-rework`, `requireNightRunAccess`) — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | – | ✓ |
+| Platte „Auslieferung“ im Board-Leitstand lesen (`GET /api/boards/{boardId}/dashboard/delivery`, `requireMembership`) — geprüft wird die Projektmitgliedschaft wie beim übrigen Leitstand, also jede Rolle, die das Board lesen darf; zeigt die Daten des ganzen Projekts | `BOARD_READ` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Jüngste Vorschau und Veröffentlichung eines Projekts mit Adresse lesen (`GET /api/projects/{projectId}/auslieferung/zuletzt`, `requireMembership`) — geprüft wird die Projektmitgliedschaft wie bei der Platte „Auslieferung“ | `BOARD_READ` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Ort und Stand eines Boards in GitLab lesen (`GET /api/projects/{id}/fremdboard/stand`, `requireMembership`) — geprüft wird die Projektmitgliedschaft | `BOARD_READ` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Abschnitt „Wartegrund“ im Kartendialog eines Pakets in Ready sehen — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | – | ✓ |
+| Läufe in der [mobilen Oberfläche](nutzung.md#unterwegs) unter `/mobil/laeufe` sehen (`GET /api/mobil/laeufe`, `GET /api/mobil/laeufe/{laufId}`) — die mobile Sicht folgt genau dem Recht, Läufe im Leitstand zu sehen: Wer sie dort nicht sieht, sieht sie auch mobil nicht, und ein solcher Lauf antwortet mit 404 wie ein unbekannter | `NIGHT_RUN_READ` | – | – | – | – | ✓ |
+| **Protokoll eines Laufs hineingeben** — der Plattform-Admin immer | `NIGHT_RUN_SUBMIT` | – | – | – | – | ✓ |
 
 Dieselbe Übersicht ist in der App unter **`/roles`** erreichbar (Link „Rollen & Rechte" auf der
 Mitglieder-Seite).
@@ -98,14 +101,22 @@ Einige Aktionen folgen nicht allein dem Recht aus der Tabelle:
 - **Kommentar bearbeiten:** `COMMENT_UPDATE` reicht nicht allein — bearbeiten darf **nur der Autor**.
   Auch ADMIN und OWNER können fremde Kommentare nicht ändern, nur löschen.
 - **Lesen** wird serverseitig über die **Mitgliedschaft** im Projekt geprüft, nicht über das jeweilige
-  `*_READ`-Recht. Das Ergebnis ist dasselbe, weil alle vier Rollen sämtliche Leserechte haben; die
+  `*_READ`-Recht. Das Ergebnis ist dasselbe, weil alle Rollen sämtliche Leserechte haben; die
   Lese-Rechte in der Matrix beschreiben die Absicht und sind für konfigurierbare Rollen (siehe unten)
-  vorgesehen.
+  vorgesehen. Einzige Ausnahme ist `REPAIR_READ`, das der Kunde nicht hat, siehe
+  [Rollen im Detail](#rollen-im-detail).
 - **Board-gebundene API-Tokens** siehe [API-Tokens](#api-tokens).
 
 ### Rollen im Detail
 
 - **VIEWER:** darf ausschließlich lesen — Boards, Spalten, Vorhaben, Karten, Kommentare, Anhänge.
+- **CUSTOMER (Kunde):** die Rolle für Kunden eines Anbieters, der seine KI im Rechenzentrum für ihn
+  arbeiten lässt. Ein Kunde hat die Rechte eines MEMBER — Ideen und Karten einstellen, kommentieren,
+  Anhänge anhängen, Rückfragen beantworten und Freigaben geben —, aber er **sieht keine Störungen beim
+  Anbieter** (`REPAIR_READ`): Reparaturkarten und Kartenprüfungen, deren Ergebnis nicht grün ist,
+  bleiben ihm verborgen. Wie Admin und Owner hält er einen **eigenen Zugang der Desktop-App**.
+  Mitglieder verwalten und Einstellungen des Projekts ändern kann er nicht. Vergeben und ändern
+  dürfen die Rolle Owner und Admin des Projekts.
 - **MEMBER:** zusätzlich Karten und Vorhaben anlegen, bearbeiten, verschieben und in den Papierkorb legen,
   Kommentare schreiben (und eigene bearbeiten) sowie Anhänge hochladen und löschen.
 - **ADMIN:** zusätzlich Boards, Spalten und Board-Labels verwalten, Karten endgültig löschen,
@@ -195,7 +206,7 @@ Den ersten Admin richtet man über den Bootstrap-Token oder direkt in der DB ein
 Die Matrix ist die einzige Quelle der Wahrheit und wird serverseitig geliefert
 (`GET /api/roles/matrix`: Rollen, Rechte mit Ressource/Operation, Grants je Rolle). Die
 `/roles`-Ansicht rendert sie als **Checkbox-Grid**: Spalten = einzelne Rechte, Zeilen = Rollen. Für die
-vier eingebauten Rollen sind die Haken **read-only**.
+fünf eingebauten Rollen sind die Haken **read-only**.
 
 Diese Seite hier ist die einzige Rechte-Übersicht im Repository; ein Test hält sie an das
 `Permission`-Enum gekoppelt, damit Code und Doku nicht auseinanderlaufen — in **beide** Richtungen:
@@ -203,7 +214,7 @@ Jedes Recht des Enums braucht eine Zeile, und jede Zeile der Matrix braucht eine
 (`RightsDocumentationTest`, Issue #1165).
 
 **Ausblick:** Frei konfigurierbare Zusatzrollen sind vorgesehen — dieselbe Matrix, weitere Zeilen mit
-aktivierbaren Haken, ohne Änderung an den vier eingebauten Rollen.
+aktivierbaren Haken, ohne Änderung an den fünf eingebauten Rollen.
 
 ## API-Tokens
 
@@ -234,8 +245,8 @@ anderen Boards oder im Papierkorb, oder bereits gelöscht — wird mit **404** b
 es nicht gibt.
 
 **Auslieferungen melden** (siehe [Platte Auslieferung](nutzung.md#platte-auslieferung)) geht über
-`POST /api/kanban/deployments`; `GET /api/kanban/deployments/latest` liefert den zuletzt gemeldeten
-Stand. Beide nimmt nur ein **board-gebundenes** Token an, dessen Inhaber im Projekt des Boards das
+`POST /api/kanban/deployments`; `GET /api/kanban/deployments/latest` liefert die zuletzt gemeldete
+Veröffentlichung — eine Vorschau verschiebt diesen Stand nicht. Beide nimmt nur ein **board-gebundenes** Token an, dessen Inhaber im Projekt des Boards das
 Recht `TICKET_CREATE` hat — dieselbe Bedingung, unter der das Token angelegt werden durfte, ein
 neues Recht entsteht nicht. Geprüft wird bei jedem Aufruf: Ist der Inhaber nur noch VIEWER, antwortet
 das Board mit **403**; ist er kein Mitglied des Projekts mehr, mit **404**. Ein **ungebundenes** Token
@@ -243,23 +254,26 @@ erhält **409** wie auf der übrigen Kanban-Compat-API; seine Meldung erscheint 
 
 ### Zugang der Desktop-App
 
-Der Zugang der Desktop-App ist ein board-gebundenes Token mit zwei zusätzlichen Rechten, den beiden
-Ausnahmen in der Tabelle der [Freigabe-Labels](#freigabe-labels-des-kits). Darüber hinaus kann er
-genau das, was ein board-gebundenes Token desselben Boards kann.
+Der Zugang der Desktop-App ist ein board-gebundenes Token. Hält ihn ein Admin oder Owner, trägt er
+zwei zusätzliche Rechte, die beiden Ausnahmen in der Tabelle der
+[Freigabe-Labels](#freigabe-labels-des-kits); der Zugang eines Kunden trägt sie nicht. Darüber hinaus
+kann er genau das, was ein board-gebundenes Token desselben Boards kann.
 
-- **Je Board genau einer.** Besteht schon ein wirksamer Zugang, wird ein zweiter abgewiesen, und die
-  Meldung nennt den Inhaber. Mehrere Rechner teilen sich denselben Zugang.
+- **Je Person und Board genau einer.** Kunde und Anbieter halten am selben Board je ihren eigenen
+  Zugang. Hält die Person schon einen wirksamen Zugang, wird ein zweiter abgewiesen, und die Meldung
+  nennt den Inhaber. Mehrere Rechner derselben Person teilen sich denselben Zugang.
 - **Inhaber ist, wer anlegt.** Wer den Zugang mitbenutzt, handelt unter dem Namen des Inhabers.
-- **Anlegen** kann nur, wer im Projekt des Boards Admin oder Owner ist, und nur nach Anmeldung im
-  Browser. Ein Plattform-Admin ohne Projektrolle kann es nicht.
+- **Anlegen** kann nur, wer im Projekt des Boards Admin, Owner oder Kunde ist, und nur nach Anmeldung
+  im Browser. Ein Plattform-Admin ohne Projektrolle kann es nicht.
 - **Erneuern** kann nur der Inhaber; der alte Zugang gilt danach sofort nicht mehr.
-- **Widerrufen** können der Inhaber und jeder Admin oder Owner des Projekts. Ein Widerruf ist
-  endgültig, für das Board kann sofort ein neuer Zugang angelegt werden.
+- **Widerrufen** können der Inhaber und jeder Admin oder Owner des Projekts. Ein Admin oder Owner
+  sieht dafür in der Verwaltung auch die Zugänge der anderen Personen; ein Kunde sieht nur seine
+  eigenen. Ein Widerruf ist endgültig, der Inhaber kann sofort einen neuen Zugang anlegen.
 
-Der Zugang läuft nicht von selbst ab. Er wird endgültig unwirksam, wenn der Inhaber die Rolle Admin
-oder Owner im Projekt verliert oder sein Konto gesperrt oder gelöscht wird. Danach wird jeder Aufruf
-abgewiesen, auch ein lesender, und das bleibt so, auch wenn Rolle oder Konto zurückkommen. Für das
-Board kann dann ein neuer Zugang angelegt werden.
+Der Zugang läuft nicht von selbst ab. Er wird endgültig unwirksam, wenn der Inhaber die Rolle Admin,
+Owner oder Kunde im Projekt verliert oder sein Konto gesperrt oder gelöscht wird; ein Wechsel zwischen
+diesen drei Rollen lässt ihn stehen. Danach wird jeder Aufruf abgewiesen, auch ein lesender, und das
+bleibt so, auch wenn Rolle oder Konto zurückkommen. Der Inhaber kann dann einen neuen Zugang anlegen.
 
 ### Freigabe-Labels des Kits
 
@@ -299,8 +313,8 @@ Selbstauskunft im Header `X-Agent-Model`. Eine zweite Selbstauskunft ist der Hea
 Laufkennung eines Nachtlaufs: Das Board speichert sie nur bei Token-Herkunft, sie wirkt allein auf
 die Zuordnung der Karten auf der Runner-Seite und begründet kein Recht. Der Server kann Mensch und Agent an einem
 gewöhnlichen Token nicht unterscheiden: Auch wer per CLI (`board.mjs`, `tbx`) arbeitet, setzt `kit:night` und
-`kit:nightrun` nur im Board. Einzige Ausnahme ist der [Zugang der Desktop-App](#zugang-der-desktop-app):
-Das Board erkennt die Freigabe an diesem Zugang, nicht am Menschen. Das Restrisiko ist hingenommen: Wer
+`kit:nightrun` nur im Board. Einzige Ausnahme ist der [Zugang der Desktop-App](#zugang-der-desktop-app)
+eines Admins oder Owners: Das Board erkennt die Freigabe an diesem Zugang, nicht am Menschen. Das Restrisiko ist hingenommen: Wer
 den Zugang der App besitzt, gibt frei. Dass keine KI-Sitzung an ihn kommt, muss das
 claude-workflow-kit bei der Verwahrung sicherstellen; das Board kann es nicht prüfen.
 

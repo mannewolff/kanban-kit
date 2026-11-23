@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
@@ -21,6 +22,7 @@ import org.mwolff.manban.deployment.application.Meldeergebnis;
 import org.mwolff.manban.deployment.application.NeueMeldung;
 import org.mwolff.manban.deployment.application.TokenNotBoundForDeploymentException;
 import org.mwolff.manban.deployment.domain.Ausgang;
+import org.mwolff.manban.deployment.domain.Auslieferungsart;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -71,6 +73,15 @@ class DeploymentIngestController {
    */
   static final int MAX_COMMITS = 20_000;
 
+  /** Längengrenze der Adresse — die Spalte {@code deployment_attempt.url} aus {@code V81}. */
+  static final int URL_MAX = 2000;
+
+  /** Die erlaubten Werte von {@code art} (Issue #2215, Plan #2206 E10). */
+  static final String ART_MUSTER = "vorschau|veroeffentlichung";
+
+  /** Nur {@code https}-Adressen ohne Leerraum (Issue #2215, Plan #2206 E10). */
+  static final String URL_MUSTER = "https://[^\\s]+";
+
   private final DeploymentService service;
 
   DeploymentIngestController(DeploymentService service) {
@@ -93,7 +104,12 @@ class DeploymentIngestController {
           finishedAt ist der Zeitpunkt des Ausgangs, er zählt, nicht der Eingang. commits \
           nennt die Commits seit dem vorigen gemeldeten Stand (siehe „Letzten gemeldeten \
           Stand abrufen“), je mit Commit-Zeitpunkt; derselbe Commit darf in mehreren Versuchen \
-          stehen und zählt trotzdem einmal.""")
+          stehen und zählt trotzdem einmal.
+
+          art unterscheidet vorschau und veroeffentlichung; ohne art zählt die Meldung als \
+          Veröffentlichung. Eine Vorschau zählt in keiner Kennzahl und verschiebt den letzten \
+          gemeldeten Stand nicht. url nennt die Adresse der Vorschau bzw. Veröffentlichung, nur \
+          https. Art und Adresse gehören zum Inhalt einer wiederholten Meldung.""")
   @ApiResponse(responseCode = "201", description = "Der Versuch ist neu gespeichert (CREATED).")
   @ApiResponse(
       responseCode = "200",
@@ -103,7 +119,8 @@ class DeploymentIngestController {
       description =
           """
           Ungültige Eingabe: ein Feld fehlt oder verletzt seine Grenzen (Details in \
-          fieldErrors), oder finishedAt liegt mehr als 5 Minuten nach der Serverzeit.""",
+          fieldErrors), etwa eine unbekannte art oder eine url ohne https, oder finishedAt \
+          liegt mehr als 5 Minuten nach der Serverzeit.""",
       content =
           @Content(
               mediaType = ApiSchemas.PROBLEM_JSON,
@@ -151,15 +168,15 @@ class DeploymentIngestController {
       summary = "Letzten gemeldeten Stand abrufen",
       description =
           """
-          Nennt den Versuch des Projekts mit dem größten finishedAt, gleich welchen Ausgangs; \
-          bei Gleichstand den zuletzt eingegangenen. Ein Auslieferungslauf bestimmt daraus die \
-          Commits seit dem vorigen gemeldeten Stand — auch die eines gescheiterten Versuchs \
-          sind schon gespeichert und müssen nicht erneut gemeldet werden. Ohne gemeldeten \
-          Versuch 204 ohne Rumpf.""")
+          Nennt die Veröffentlichung des Projekts mit dem größten finishedAt, gleich welchen \
+          Ausgangs; bei Gleichstand die zuletzt eingegangene. Eine Vorschau zählt nicht. Ein \
+          Auslieferungslauf bestimmt daraus die Commits seit dem vorigen gemeldeten Stand — \
+          auch die eines gescheiterten Versuchs sind schon gespeichert und müssen nicht erneut \
+          gemeldet werden. Ohne gemeldete Veröffentlichung 204 ohne Rumpf.""")
   @ApiResponse(responseCode = "200", description = "Der zuletzt gemeldete Stand.")
   @ApiResponse(
       responseCode = "204",
-      description = "Für das Projekt ist noch kein Versuch gemeldet.",
+      description = "Für das Projekt ist noch keine Veröffentlichung gemeldet.",
       // Ohne Rumpf: Sonst erbte die Antwort das Schema des Rückgabetyps.
       content = @Content)
   @ApiResponse(
@@ -216,6 +233,7 @@ class DeploymentIngestController {
    * Paare (E3), und eine zweite Zeile verletzte den Primärschlüssel {@code (attempt_ref, sha)}.
    */
   private static NeueMeldung meldung(DeploymentRequest request) {
+    String art = request.art();
     return new NeueMeldung(
         request.attemptId(),
         request.outcome(),
@@ -224,7 +242,9 @@ class DeploymentIngestController {
         request.commits().stream()
             .map(c -> new NeueMeldung.Commit(c.sha(), c.committedAt()))
             .distinct()
-            .toList());
+            .toList(),
+        art == null ? null : Auslieferungsart.aus(art),
+        request.url());
   }
 
   /** Was mit der Meldung geschah. */
@@ -260,7 +280,24 @@ class DeploymentIngestController {
       @Schema(description = "Die Commits seit dem vorigen gemeldeten Stand, höchstens 20000.")
           @NotNull
           @Size(max = MAX_COMMITS)
-          List<@Valid @NotNull DeploymentCommitRequest> commits) {}
+          List<@Valid @NotNull DeploymentCommitRequest> commits,
+      @Schema(
+              description =
+                  "Art der Meldung: vorschau oder veroeffentlichung; ohne zählt sie als"
+                      + " Veröffentlichung.",
+              allowableValues = {"vorschau", "veroeffentlichung"},
+              example = "vorschau")
+          @Nullable
+          @Pattern(regexp = ART_MUSTER)
+          String art,
+      @Schema(
+              description =
+                  "Adresse der Vorschau bzw. Veröffentlichung; nur https, höchstens 2000 Zeichen.",
+              example = "https://vorschau.example.org/42")
+          @Nullable
+          @Size(max = URL_MAX)
+          @Pattern(regexp = URL_MUSTER)
+          String url) {}
 
   /** Ein gemeldeter Commit mit seinem Commit-Zeitpunkt. */
   @Schema(description = "Ein Commit des Versuchs.")

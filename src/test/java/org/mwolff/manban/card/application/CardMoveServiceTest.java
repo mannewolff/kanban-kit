@@ -1296,4 +1296,61 @@ class CardMoveServiceTest {
     order.verify(transitions).closeOpen(100L, VORGABE);
     order.verify(transitions).open(100L, 60L, "Backlog", VORGABE);
   }
+
+  // --- Kunde ohne REPAIR_READ (Issue #2211, #2226) -----------------------
+
+  /** Die Karte mit der ID und Nummer trägt kit:repair; der Aufrufer 5 hat kein REPAIR_READ. */
+  private void reparaturkarte(Card karte) {
+    when(cardLabels.kartenMitLabel(PROJECT, "kit:repair")).thenReturn(List.of(karte.id()));
+    when(cards.findByIds(List.of(karte.id()))).thenReturn(List.of(karte));
+    when(cards.findById(karte.id())).thenReturn(Optional.of(karte));
+  }
+
+  private void nichtsGeschrieben() {
+    verify(cards, never()).move(anyLong(), anyLong(), anyInt());
+    verify(cards, never()).transfer(anyLong(), anyLong(), anyLong(), anyInt());
+    verify(cards, never()).save(any(Card.class));
+    verify(transitions, never()).closeOpen(anyLong(), any(Instant.class));
+    verify(events, never()).publishEvent(any(Object.class));
+  }
+
+  @Test
+  void alsKunde_endetDasVerschiebenDerReparaturkarteMit404() {
+    reparaturkarte(card(1L, 20L, 1, false, null, CardType.CARD, null, null));
+    when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "Done", 4));
+
+    assertThatThrownBy(() -> service.move(5L, 1L, 21L, 0))
+        .isInstanceOf(CardNotFoundException.class);
+    nichtsGeschrieben();
+  }
+
+  @Test
+  void alsKunde_endetDerStatuswechselDerReparaturkarteMit404() {
+    reparaturkarte(paket(5L, "Paket", CardType.CARD, CardStatus.BACKLOG));
+
+    assertThatThrownBy(() -> service.setStatus(5L, 5L, "IN_PROGRESS"))
+        .isInstanceOf(CardNotFoundException.class);
+    nichtsGeschrieben();
+  }
+
+  @Test
+  void alsKunde_endetDerUmzugDerReparaturkarteAufEinAnderesBoardMit404() {
+    stubTransferScenario(null);
+    reparaturkarte(card(100L, 50L, 3, false, FIXED, CardType.CARD, null, null));
+
+    assertThatThrownBy(() -> service.transfer(5L, 100L, 20L, 60L))
+        .isInstanceOf(CardNotFoundException.class);
+    nichtsGeschrieben();
+  }
+
+  @Test
+  void alsOwner_verschiebtDieReparaturkarte() {
+    reparaturkarte(card(1L, 20L, 1, false, null, CardType.CARD, null, null));
+    when(permissions.hasPermission(5L, PROJECT, Permission.REPAIR_READ)).thenReturn(true);
+    when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "Done", 4));
+
+    service.move(5L, 1L, 21L, 0);
+
+    verify(cards).move(1L, 21L, 0);
+  }
 }

@@ -117,6 +117,7 @@ class SchreibsperreIT extends AbstractIntegrationTest {
           Map.entry("targetcard", "zweite"),
           Map.entry("attachment", "attachment"),
           Map.entry("comment", "comment"),
+          Map.entry("kommentar", "comment"),
           Map.entry("label", "label"),
           Map.entry("column", "column"),
           Map.entry("card", "card"),

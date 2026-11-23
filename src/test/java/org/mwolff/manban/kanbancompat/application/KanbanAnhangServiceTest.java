@@ -77,7 +77,7 @@ class KanbanAnhangServiceTest {
     when(attachments.list(USER, CARD)).thenReturn(erwartet);
 
     assertThat(service.list(bound(), CARD)).isSameAs(erwartet);
-    verify(ingest).requireReadableOnBoard(CARD, BOARD);
+    verify(ingest).requireReadableOnBoard(USER, CARD, BOARD);
   }
 
   @Test
@@ -87,12 +87,12 @@ class KanbanAnhangServiceTest {
     when(attachments.downloadOnCard(USER, CARD, ANHANG)).thenReturn(erwartet);
 
     assertThat(service.download(bound(), CARD, ANHANG)).isSameAs(erwartet);
-    verify(ingest).requireReadableOnBoard(CARD, BOARD);
+    verify(ingest).requireReadableOnBoard(USER, CARD, BOARD);
   }
 
   @Test
   void listAufUnerreichbarerKarteAntwortetWieEinUnbekannterAnhang() {
-    doThrow(new CardNotFoundException()).when(ingest).requireReadableOnBoard(CARD, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireReadableOnBoard(USER, CARD, BOARD);
 
     assertThatThrownBy(() -> service.list(bound(), CARD))
         .isInstanceOf(AttachmentNotFoundException.class)
@@ -103,7 +103,7 @@ class KanbanAnhangServiceTest {
 
   @Test
   void downloadAufUnerreichbarerKarteAntwortetWieEinUnbekannterAnhang() {
-    doThrow(new CardNotFoundException()).when(ingest).requireReadableOnBoard(CARD, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireReadableOnBoard(USER, CARD, BOARD);
 
     assertThatThrownBy(() -> service.download(bound(), CARD, ANHANG))
         .isInstanceOf(AttachmentNotFoundException.class)

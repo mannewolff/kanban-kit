@@ -37,7 +37,14 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Herkunft (A11): Aktivitäten und Label-Ereignisse tragen {@code TOKEN}, wenn der Benutzer im
  * fremden System das hinterlegte Kit-Konto ist, sonst {@code SESSION}, dazu den Benutzernamen als
  * externen Akteur — nie einen Benutzer von kanban-kit.
+ *
+ * <p>Vertraulichkeit (Issue #2200): Eine Karte, die im fremden System vertraulich ist, entfernt
+ * {@link #vertraulicheEntfernen} endgültig über {@link CardArchiveService}.
  */
+// PMD.CouplingBetweenObjects: Der einzige Schreibweg des Spiegels (A1) braucht jeden Schreibweg
+// von card, den der Abgleich bedient — seit Issue #2200 auch das endgültige Entfernen
+// vertraulicher Karten, das er an CardArchiveService abgibt, statt es ein zweites Mal zu bauen.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class FremdKartenSchreiber {
 
@@ -55,6 +62,7 @@ public class FremdKartenSchreiber {
   private final CardLabelRepository cardLabels;
   private final KartenGrundlage grundlage;
   private final BoardQuelle boardQuelle;
+  private final CardArchiveService archiv;
 
   public FremdKartenSchreiber(
       CardRepository cards,
@@ -65,7 +73,8 @@ public class FremdKartenSchreiber {
       LabelRepository labels,
       CardLabelRepository cardLabels,
       KartenGrundlage grundlage,
-      BoardQuelle boardQuelle) {
+      BoardQuelle boardQuelle,
+      CardArchiveService archiv) {
     this.cards = cards;
     this.boardService = boardService;
     this.transitions = transitions;
@@ -75,6 +84,7 @@ public class FremdKartenSchreiber {
     this.cardLabels = cardLabels;
     this.grundlage = grundlage;
     this.boardQuelle = boardQuelle;
+    this.archiv = archiv;
   }
 
   /**
@@ -235,6 +245,24 @@ public class FremdKartenSchreiber {
   }
 
   /**
+   * Entfernt die Karten mit diesen Nummern endgültig, weil sie im fremden System vertraulich sind
+   * (Issue #2200): Der Zugang des Spiegels darf dort mehr lesen als ein Mitglied des Projekts, und
+   * eine Kopie im Papierkorb bliebe samt Beschreibung und Kommentaren für jedes Mitglied lesbar.
+   * Erfasst werden Karten auf dem Board, im Archiv und im Papierkorb; eine unbekannte Nummer ist
+   * kein Fehler. Anders als beim Löschen (A8) bleiben keine Messungen.
+   *
+   * @param nummern Nummern der vertraulichen Karten im fremden System
+   * @return wie viele Karten entfernt wurden
+   */
+  @Transactional
+  public int vertraulicheEntfernen(long boardId, List<Integer> nummern) {
+    if (nummern.isEmpty()) {
+      return 0;
+    }
+    return archiv.vertraulicheEntfernen(fremdesProjekt(boardId), boardId, nummern);
+  }
+
+  /**
    * Setzt der Karte ein Label; das Board bekommt es, wenn es den Namen noch nicht trägt. Nur ein
    * tatsächliches Hinzukommen wird als Label-Ereignis festgehalten, mit Herkunft und externem
    * Akteur (A11).
@@ -302,7 +330,7 @@ public class FremdKartenSchreiber {
   private @Nullable Long vorfahrId(long projectId, long cardId, @Nullable Integer vorfahrNummer) {
     try {
       return DerivedFrom.resolve(cards, projectId, vorfahrNummer, cardId);
-    } catch (InvalidDerivedFromException e) {
+    } catch (InvalidDerivedFromException _) {
       return null;
     }
   }

@@ -4,13 +4,17 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.mwolff.manban.fremdboard.domain.FremdBoardArt;
 import org.mwolff.manban.fremdboard.domain.FremdBoardQuelle;
 import org.mwolff.manban.fremdboard.domain.FremdEreignis;
 import org.mwolff.manban.fremdboard.domain.FremdKarte;
 import org.mwolff.manban.fremdboard.domain.FremdNotiz;
+import org.mwolff.manban.fremdboard.domain.FremdNotizen;
+import org.mwolff.manban.fremdboard.domain.FremdNummern;
 import org.mwolff.manban.fremdboard.domain.Verbindung;
 import org.springframework.stereotype.Component;
 
@@ -25,9 +29,10 @@ import org.springframework.stereotype.Component;
  * Quelle {@link GitLabAbrufException} mit lesbarem Grund; weder Meldung noch Protokoll nennen den
  * Zugang.
  *
- * <p>Vertrauliche Issues und interne Notizen gibt sie auf keinem Weg heraus (Issue #2195): Eine
- * Karte, die in GitLab vertraulich wird, fehlt damit in {@link #nummern} und wandert beim nächsten
- * Vollabgleich in den Papierkorb.
+ * <p>Vertrauliche Issues und interne Notizen gibt sie auf keinem Weg heraus (Issue #2195). Sie
+ * überträgt die Vertraulichkeit aber ausdrücklich (Issue #2200): {@link #nummern} und {@link
+ * #notizen} nennen die Nummern vertraulicher Karten und die Kennungen interner Notizen — ohne
+ * Inhalt —, damit der Abgleich schon gespiegelte Kopien entfernt, statt sie liegen zu lassen.
  */
 @Component
 public final class GitLabQuelle implements FremdBoardQuelle {
@@ -47,11 +52,15 @@ public final class GitLabQuelle implements FremdBoardQuelle {
   }
 
   @Override
-  public List<Long> nummern(Verbindung verbindung) {
-    return abruf.seiten(verbindung, ISSUES + "?state=all&per_page=" + SEITENGROESSE).stream()
-        .filter(eintrag -> !GitLabAntwort.vertraulich(eintrag))
-        .map(eintrag -> GitLabAntwort.zahl(eintrag, "iid"))
-        .toList();
+  public FremdNummern nummern(Verbindung verbindung) {
+    List<Long> sichtbar = new ArrayList<>();
+    List<Long> vertraulich = new ArrayList<>();
+    for (JsonNode eintrag :
+        abruf.seiten(verbindung, ISSUES + "?state=all&per_page=" + SEITENGROESSE)) {
+      long nummer = GitLabAntwort.zahl(eintrag, "iid");
+      (GitLabAntwort.vertraulich(eintrag) ? vertraulich : sichtbar).add(nummer);
+    }
+    return new FremdNummern(sichtbar, vertraulich);
   }
 
   @Override
@@ -91,14 +100,24 @@ public final class GitLabQuelle implements FremdBoardQuelle {
   }
 
   @Override
-  public List<FremdNotiz> notizen(Verbindung verbindung, long nummer) {
-    return abruf
-        .seiten(
+  public FremdNotizen notizen(Verbindung verbindung, long nummer) {
+    List<FremdNotiz> sichtbar = new ArrayList<>();
+    Set<String> vertraulich = new HashSet<>();
+    for (JsonNode eintrag :
+        abruf.seiten(
             verbindung,
-            ISSUES + "/" + nummer + "/notes?sort=asc&order_by=created_at&per_page=" + SEITENGROESSE)
-        .stream()
-        .flatMap(eintrag -> GitLabAntwort.notiz(eintrag, nummer).stream())
-        .toList();
+            ISSUES
+                + "/"
+                + nummer
+                + "/notes?sort=asc&order_by=created_at&per_page="
+                + SEITENGROESSE)) {
+      if (GitLabAntwort.interneNotiz(eintrag)) {
+        vertraulich.add(GitLabAntwort.notizKennung(eintrag));
+      } else {
+        GitLabAntwort.notiz(eintrag, nummer).ifPresent(sichtbar::add);
+      }
+    }
+    return new FremdNotizen(sichtbar, vertraulich);
   }
 
   @Override

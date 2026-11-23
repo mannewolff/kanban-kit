@@ -29,7 +29,7 @@ class RoleMatrixServiceTest {
     RoleMatrixService.RoleMatrixView view = service.matrix();
 
     // Then
-    assertThat(view.roles()).containsExactly("VIEWER", "MEMBER", "ADMIN", "OWNER");
+    assertThat(view.roles()).containsExactly("VIEWER", "CUSTOMER", "MEMBER", "ADMIN", "OWNER");
   }
 
   @Test
@@ -49,6 +49,16 @@ class RoleMatrixServiceTest {
     // Then
     assertThat(view.permissions())
         .contains(new RoleMatrixService.PermissionView("BOARD_CREATE", "BOARD", "CREATE"));
+  }
+
+  @Test
+  void matrix_fuehrtStoerungenAlsEigeneRessource() {
+    // When
+    RoleMatrixService.RoleMatrixView view = service.matrix();
+
+    // Then
+    assertThat(view.permissions())
+        .contains(new RoleMatrixService.PermissionView("REPAIR_READ", "REPAIR", "READ"));
   }
 
   @Test

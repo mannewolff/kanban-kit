@@ -22,6 +22,8 @@ import org.mwolff.manban.fremdboard.domain.FremdBoardQuelle;
 import org.mwolff.manban.fremdboard.domain.FremdEreignis;
 import org.mwolff.manban.fremdboard.domain.FremdKarte;
 import org.mwolff.manban.fremdboard.domain.FremdNotiz;
+import org.mwolff.manban.fremdboard.domain.FremdNotizen;
+import org.mwolff.manban.fremdboard.domain.FremdNummern;
 import org.mwolff.manban.fremdboard.domain.FremdStatus;
 import org.mwolff.manban.fremdboard.domain.HerkunftAusText;
 import org.mwolff.manban.fremdboard.domain.KartenZustand;
@@ -125,6 +127,11 @@ public class AbgleichService {
    * die es im fremden System gibt und hier noch nicht, und markiert jede gespiegelte Karte als
    * gelöscht, die es dort nicht mehr gibt. Ihre Messungen bleiben.
    *
+   * <p>Eine Karte, die dort vertraulich ist, entfernt er endgültig, gleich ob sie auf dem Board, im
+   * Archiv oder im Papierkorb liegt (Issue #2200): Der Zugang des Spiegels darf dort mehr lesen als
+   * ein Mitglied des Projekts. Das geschieht gleich nach dem Lesen der Nummern, vor jedem weiteren
+   * Abruf — die Vertraulichkeit ist ausdrücklich übertragen, nicht aus einem Fehlen geschlossen.
+   *
    * <p>Die Nummern hier werden <em>vor</em> denen dort gelesen: Eine Karte, die dazwischen dort
    * angelegt und hier von einem Anstoß gespiegelt wird, fehlt so in beiden Listen und nicht nur in
    * der fremden. Gelöscht wird erst, wenn alles gelesen ist; scheitert ein Abruf, ist nichts
@@ -138,7 +145,17 @@ public class AbgleichService {
   public void vollAbgleichen(Verbindung verbindung, Instant seit) {
     FremdBoardQuelle quelle = quelle(verbindung.art());
     Set<Integer> hier = new HashSet<>(bestand.nummern(verbindung.projectId()));
-    Set<Long> dort = new HashSet<>(quelle.nummern(verbindung));
+    FremdNummern nummern = quelle.nummern(verbindung);
+    List<Integer> vertraulich =
+        nummern.vertraulich().stream()
+            .filter(n -> n <= Integer.MAX_VALUE)
+            .map(Long::intValue)
+            .toList();
+    if (!vertraulich.isEmpty()) {
+      schreiber.vertraulicheEntfernen(verbindung.boardId(), vertraulich);
+      hier.removeAll(vertraulich);
+    }
+    Set<Long> dort = new HashSet<>(nummern.sichtbar());
     Set<Long> gelesen = new HashSet<>();
     for (FremdKarte karte : quelle.geaenderteKarten(verbindung, seit)) {
       abgleichen(verbindung, quelle, karte);
@@ -150,8 +167,8 @@ public class AbgleichService {
       }
     }
     Instant festgestellt = clock.instant();
-    for (int nummer : hier) {
-      if (!dort.contains((long) nummer)) {
+    for (Integer nummer : hier) {
+      if (!dort.contains(nummer.longValue())) {
         schreiber.alsGeloeschtMarkieren(verbindung.boardId(), nummer, festgestellt);
       }
     }
@@ -161,7 +178,7 @@ public class AbgleichService {
   private void abgleichen(Verbindung verbindung, FremdBoardQuelle quelle, FremdKarte karte) {
     long nummer = karte.nummer();
     List<FremdEreignis> neue = neueEreignisse(verbindung, quelle.ereignisse(verbindung, nummer));
-    List<FremdNotiz> notizen = quelle.notizen(verbindung, nummer);
+    FremdNotizen notizen = quelle.notizen(verbindung, nummer);
     String adresse = quelle.adresse(verbindung, nummer);
     StatusZuordnung zuordnung = new StatusZuordnung(verbindung.statuslabels());
 
@@ -323,7 +340,13 @@ public class AbgleichService {
     schreiber.herkunftSetzen(verbindung.boardId(), nummer(karte), vorfahr);
   }
 
-  private void notizen(Verbindung verbindung, long cardId, List<FremdNotiz> notizen) {
+  /**
+   * Entfernt zuerst die Kommentare, deren Notiz dort intern ist (Issue #2200), dann spiegelt er die
+   * übrigen und kennzeichnet die fehlenden.
+   */
+  private void notizen(Verbindung verbindung, long cardId, FremdNotizen gelesen) {
+    kommentare.spiegelVertraulicheEntfernen(cardId, gelesen.vertraulich());
+    List<FremdNotiz> notizen = gelesen.sichtbar();
     for (FremdNotiz notiz : notizen) {
       kommentare.spiegeln(
           cardId,

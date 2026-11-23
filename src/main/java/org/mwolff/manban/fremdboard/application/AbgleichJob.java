@@ -35,9 +35,10 @@ import org.springframework.stereotype.Component;
  * haben.
  *
  * <p><b>Fehler</b> (A9): Scheitert ein Abgleich, steht der Grund in {@code letzter_fehler}, und
- * {@code letzter_abgleich_am} kehrt auf den letzten gelungenen zurück — der Board-Hinweis zeigt,
- * von wann der Stand ist. Gelöscht wird dann nichts; der nächste Takt versucht es erneut. Ein
- * Fehler in einem Projekt hält die übrigen nicht auf.
+ * {@code letzter_abgleich_am} kehrt auf den letzten gelungenen zurück. {@code stand_am} setzt nur
+ * ein gelungener Abgleich, auf den Zeitpunkt seines Anspruchs — aus ihm zeigt der Board-Hinweis,
+ * von wann der Stand ist (Issue #2222). Gelöscht wird dann nichts; der nächste Takt versucht es
+ * erneut. Ein Fehler in einem Projekt hält die übrigen nicht auf.
  */
 // PMD.AvoidCatchingGenericException: Der Job muss jeden Fehler eines Projekts überleben, sonst
 // bliebe bei einem kaputten Projekt jeder Abgleich aus. Der Fehler wird vermerkt und protokolliert,
@@ -123,7 +124,7 @@ public class AbgleichJob {
       verbindungen.abgleichGescheitert(projectId, jetzt, bisher, FEHLER_INTERN);
       return;
     }
-    verbindungen.abgleichGelungen(projectId, voll ? jetzt : null);
+    verbindungen.abgleichGelungen(projectId, jetzt, voll ? jetzt : null);
   }
 
   private static Instant seit(Verbindung verbindung, @Nullable Instant zuletzt) {

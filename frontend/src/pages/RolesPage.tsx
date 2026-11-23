@@ -62,6 +62,7 @@ export function RolesPage({ api = defaultRolesApi }: { api?: RolesApi } = {}) {
   // zerlegt; unbekannte Schluessel zeigen sich roh.
   const ressourcen: Readonly<Record<string, string>> = t.ROLLEN.RESSOURCE
   const operationen: Readonly<Record<string, string>> = t.ROLLEN.OPERATION
+  const rollenNamen: Readonly<Record<string, string>> = t.ROLLEN.NAME
 
   return (
     <Box>
@@ -102,7 +103,7 @@ export function RolesPage({ api = defaultRolesApi }: { api?: RolesApi } = {}) {
             <TableBody>
               {matrix.roles.map((role) => (
                 <TableRow key={role}>
-                  <TableCell sx={{ fontWeight: 600 }}>{role}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{rollenNamen[role] ?? role}</TableCell>
                   {matrix.permissions.map((p) => (
                     <TableCell key={p.key} align="center" padding="none">
                       <Checkbox

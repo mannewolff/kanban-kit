@@ -239,6 +239,76 @@ class CommentRepositoryIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void zugangsartUndKiUeberstehen_denRundwegDerSpaltenZugangArtUndVonKi() {
+    // Issue #2208, Plan #2206 E6: V78 legt beide Spalten an.
+    Comment gespeichert =
+        comments.save(
+            new Comment(
+                null,
+                cardId,
+                userId,
+                "RZ",
+                "## Gespräch",
+                T1,
+                T1,
+                null,
+                "TOKEN",
+                "anbieter",
+                null,
+                null,
+                null,
+                null,
+                "STANDARD",
+                true));
+
+    assertThat(comments.findById(gespeichert.requireId()))
+        .get()
+        .extracting(Comment::zugangArt, Comment::vonKi)
+        .containsExactly("STANDARD", true);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT zugang_art || '/' || von_ki FROM comment WHERE id = ?",
+                String.class,
+                gespeichert.requireId()))
+        .isEqualTo("STANDARD/true");
+  }
+
+  @Test
+  void ohneZugangBleibtDieZugangsartLeerUndVonKiFalsch() {
+    // Altzeilen und Kommentare der Sitzung: leer bzw. false (Default der Spalte).
+    jdbc.update(
+        "INSERT INTO comment (card_id, author_user_id, author_name, body, created_at, updated_at)"
+            + " VALUES (?, ?, 'A', 'alt', ?, ?)",
+        cardId,
+        userId,
+        Timestamp.from(T1),
+        Timestamp.from(T1));
+
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM comment WHERE body = 'alt' AND zugang_art IS NULL"
+                    + " AND von_ki = false",
+                Integer.class))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void pruefregelWeistUnbekannteZugangsartAb() {
+    // chk_comment_zugang_art: nur STANDARD, APP oder NULL.
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "INSERT INTO comment (card_id, author_user_id, author_name, body, created_at, "
+                        + "updated_at, zugang_art) VALUES (?, ?, 'A', 'x', ?, ?, 'KI')",
+                    cardId,
+                    userId,
+                    Timestamp.from(T1),
+                    Timestamp.from(T1)))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("chk_comment_zugang_art");
+  }
+
+  @Test
   void handMarkeUebersteht_denRundwegDerNeuenSpalten() {
     // Issue #2109, Plan #2108 E4: V71 legt beide Spalten an.
     Comment gespeichert =
@@ -276,7 +346,7 @@ class CommentRepositoryIT extends AbstractIntegrationTest {
     comments.save(kitKommentar(cardId, "## Frueh", T1).withBody("Hand", null, "SESSION", T2));
     comments.save(kitKommentar(fremdeKarte, "## Andere Karte", T1));
 
-    assertThat(service.kettenKommentare(List.of(cardId, zweiteKarte)))
+    assertThat(service.kettenKommentare(userId, projectId, List.of(cardId, zweiteKarte)))
         .extracting(
             CommentService.KettenKommentarView::cardId,
             CommentService.KettenKommentarView::body,
@@ -290,7 +360,7 @@ class CommentRepositoryIT extends AbstractIntegrationTest {
 
   @Test
   void kettenKommentareOhneKartenIstLeer() {
-    assertThat(service.kettenKommentare(List.of())).isEmpty();
+    assertThat(service.kettenKommentare(userId, projectId, List.of())).isEmpty();
   }
 
   @Test

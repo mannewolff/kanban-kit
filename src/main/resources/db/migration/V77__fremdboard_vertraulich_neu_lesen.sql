@@ -1,0 +1,24 @@
+-- ---------------------------------------------------------------------------
+-- Vertrauliche Inhalte aus dem Spiegel entfernen: Altbestand (Issue #2200)
+--
+-- Vor Issue #2195 hat der Spiegel vertrauliche GitLab-Issues und interne Notizen wie alle anderen
+-- uebernommen; Issue #2195 hat nur weitere Importe verhindert. Seit Issue #2200 entfernt der
+-- Vollabgleich eine vertrauliche Karte endgueltig (auch aus dem Papierkorb), und der Abgleich einer
+-- Karte entfernt die Kommentare ihrer internen Notizen. Eine Karte, die sich in GitLab seit dem
+-- letzten Vollabgleich nicht geaendert hat, liest der Vollabgleich aber nicht neu — ihre schon
+-- gespiegelten internen Notizen blieben.
+--
+-- Darum beginnt der naechste Abgleich jeder Verbindung als Vollabgleich ab dem Anfang der Zeit
+-- (AbgleichJob: seit = letzter_vollabgleich_am - Ueberlappung): Er liest jede Karte samt Notizen
+-- einmal neu. Doppelt gelesene Wechsel zaehlen nicht doppelt (fremdboard_ereignis); Karten und
+-- Messungen bleiben, wie sie sind.
+--
+-- Kein Datenverlust: letzter_vollabgleich_am traegt nur den Zeitpunkt des letzten Vollabgleichs
+-- und wird vom naechsten gelungenen neu gesetzt.
+--
+-- Rueckweg (Flyway Community kennt kein Undo): keiner noetig; der naechste gelungene Vollabgleich
+-- setzt die Spalte wieder auf seinen Zeitpunkt. Danach die Zeile von V77 aus
+-- flyway_schema_history loeschen, falls die Migration zurueckgenommen werden soll.
+-- ---------------------------------------------------------------------------
+UPDATE fremdboard_verbindung
+   SET letzter_vollabgleich_am = TIMESTAMPTZ '1970-01-01 00:00:00+00';

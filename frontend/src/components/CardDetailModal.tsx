@@ -50,6 +50,20 @@ import {
 import { vorhabenKostenApi as defaultVorhabenKostenApi, type VorhabenKostenApi, type VorhabenKostenView } from '../api/vorhabenKosten'
 import { VorhabenKostenZeile } from './leitstand/VorhabenKostenZeile'
 import { Entscheidungskette } from './Entscheidungskette'
+import { GespraechVerlauf } from './anbieter/GespraechVerlauf'
+import { RueckfrageKarte } from './anbieter/RueckfrageKarte'
+import {
+  rueckfragenApi as defaultRueckfragenApi,
+  type Rueckfrage,
+  type RueckfragenApi,
+} from '../api/rueckfragen'
+import {
+  auslieferungApi as defaultAuslieferungApi,
+  type AuslieferungApi,
+  type AuslieferungZuletzt,
+} from '../api/auslieferung'
+import { KOEPFE, traegtKopf } from '../lib/kitWortformen'
+import { istGespraechsbeitrag } from '../lib/gespraech'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
 import { KettenStufenleiste, traegtStufenleiste, type LabelAenderung } from './nachtlauf/KettenStufenleiste'
 import { Wartegrund } from './nachtlauf/Wartegrund'
@@ -59,6 +73,7 @@ import type { Member } from '../api/members'
 import { AbnahmeSzenarienDialog } from './AbnahmeSzenarienDialog'
 import { Breadcrumbs } from './Breadcrumbs'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
+import { useAnhangHochladen } from '../lib/useAnhangHochladen'
 import { szenarienAus } from '../lib/abnahmeSzenarien'
 import { CardFields } from './CardFields'
 import { vorhabenFeld } from '../lib/cardEpic'
@@ -542,6 +557,7 @@ function CommentsSection({
   comments,
   currentUserId,
   canModerateComments,
+  schreibbar,
   editingCommentId,
   editingBody,
   newComment,
@@ -556,6 +572,8 @@ function CommentsSection({
   comments: Comment[]
   currentUserId: number | undefined
   canModerateComments: boolean
+  /** `false` an einer Karte aus GitLab: Kommentare nur lesen, der Server lehnt jedes Schreiben ab (Issue #2170). */
+  schreibbar: boolean
   editingCommentId: number | null
   editingBody: string
   newComment: string
@@ -595,7 +613,7 @@ function CommentsSection({
                 </Stack>
                 <Stack direction="row" spacing={0.5}>
                   {/* Bearbeiten darf nur der Autor selbst. */}
-                  {isAuthor && editingCommentId !== c.id && (
+                  {schreibbar && isAuthor && editingCommentId !== c.id && (
                     <VorschauGesperrt>
                       <IconButton size="small" aria-label={t.KARTE.KOMMENTAR_BEARBEITEN} onClick={() => onStartEdit(c)}>
                         ✎
@@ -603,7 +621,7 @@ function CommentsSection({
                     </VorschauGesperrt>
                   )}
                   {/* Löschen ist Moderation: nur Admin/Owner (bzw. Plattform-Admin). */}
-                  {canModerateComments && (
+                  {schreibbar && canModerateComments && (
                     <VorschauGesperrt>
                       <IconButton size="small" aria-label={t.KARTE.KOMMENTAR_LOESCHEN} onClick={() => onDelete(c.id)}>
                         ✕
@@ -635,21 +653,23 @@ function CommentsSection({
         {comments.length === 0 && <Typography color="text.secondary">{t.KARTE.KEINE_KOMMENTARE}</Typography>}
       </Stack>
       {/* alignItems explizit: sonst zieht der Default `stretch` den Senden-Button auf Feldhöhe. */}
-      <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mt: 1 }}>
-        {/* Das Feld trägt seinen Namen am Eingabeelement; dort steht in der Vorschau der Hinweis. */}
-        <VorschauGesperrt>
-          <TextField {...commentFieldProps} size="small" fullWidth placeholder={t.KARTE.KOMMENTAR_SCHREIBEN} value={newComment}
-            onChange={(e) => onNewCommentChange(e.target.value)}
-            error={isTooLong(newComment)}
-            helperText={isTooLong(newComment) ? tooLongMessage(newComment.length, sprache) : undefined}
-            slotProps={{ htmlInput: { 'aria-label': vorschau ? t.VORSCHAU.GESPERRT : t.KARTE.KOMMENTAR_SCHREIBEN } }} />
-        </VorschauGesperrt>
-        <VorschauGesperrt>
-          <Button variant="contained" size="small" onClick={onAdd} disabled={isTooLong(newComment)}>
-            {t.KARTE.SENDEN}
-          </Button>
-        </VorschauGesperrt>
-      </Stack>
+      {schreibbar && (
+        <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mt: 1 }}>
+          {/* Das Feld trägt seinen Namen am Eingabeelement; dort steht in der Vorschau der Hinweis. */}
+          <VorschauGesperrt>
+            <TextField {...commentFieldProps} size="small" fullWidth placeholder={t.KARTE.KOMMENTAR_SCHREIBEN} value={newComment}
+              onChange={(e) => onNewCommentChange(e.target.value)}
+              error={isTooLong(newComment)}
+              helperText={isTooLong(newComment) ? tooLongMessage(newComment.length, sprache) : undefined}
+              slotProps={{ htmlInput: { 'aria-label': vorschau ? t.VORSCHAU.GESPERRT : t.KARTE.KOMMENTAR_SCHREIBEN } }} />
+          </VorschauGesperrt>
+          <VorschauGesperrt>
+            <Button variant="contained" size="small" onClick={onAdd} disabled={isTooLong(newComment)}>
+              {t.KARTE.SENDEN}
+            </Button>
+          </VorschauGesperrt>
+        </Stack>
+      )}
     </Box>
   )
 }
@@ -1205,6 +1225,100 @@ function KartenDialogAktionen({
   )
 }
 
+/** Rückfragen einer Karte mit der jüngsten Auslieferung des Projekts (Issue #2217). */
+interface RueckfragenStand {
+  /** Leer ohne Rückfrage, bei einem Ladefehler und solange sie laden (Plan #2206 E15). */
+  rueckfragen: Rueckfrage[]
+  zuletzt: AuslieferungZuletzt | null
+  beantwortet: (neu: Rueckfrage) => void
+}
+
+/**
+ * Lädt die Rückfragen der Karte und — nur an einer Freigabe-Rückfrage mit bekanntem Projekt — die
+ * jüngste Auslieferung für „Veröffentlicht unter …“. Nach einer Antwort steht ein neuer Kommentar an
+ * der Karte (`kommentareNeu`); der Stand der Rückfrage kommt aus der Antwort des Servers.
+ */
+function useRueckfragen(
+  cardId: number,
+  projectId: number | undefined,
+  api: Pick<RueckfragenApi, 'liste'>,
+  auslieferung: Pick<AuslieferungApi, 'zuletzt'>,
+  kommentareNeu: () => void,
+): RueckfragenStand {
+  const [rueckfragen, setRueckfragen] = useState<Rueckfrage[]>([])
+  const [zuletzt, setZuletzt] = useState<AuslieferungZuletzt | null>(null)
+
+  useEffect(() => {
+    void api.liste(cardId).then(setRueckfragen).catch(() => setRueckfragen([]))
+  }, [cardId, api])
+
+  const freigabeProjekt = rueckfragen.some((r) => r.commit !== null) ? projectId : undefined
+  useEffect(() => {
+    if (freigabeProjekt === undefined) {
+      return
+    }
+    void auslieferung.zuletzt(freigabeProjekt).then(setZuletzt).catch(() => setZuletzt(null))
+  }, [freigabeProjekt, auslieferung])
+
+  const beantwortet = (neu: Rueckfrage) => {
+    setRueckfragen((alle) => alle.map((r) => (r.kommentarId === neu.kommentarId ? neu : r)))
+    kommentareNeu()
+  }
+  return { rueckfragen, zuletzt, beantwortet }
+}
+
+/**
+ * Rückfragen und Antworten stehen als Rückfrage im Verlauf, nicht noch einmal als Kommentar — aber
+ * nur, wenn der Server Rückfragen liefert; sonst bleibt alles wie bisher (Plan #2206 E15).
+ */
+function sichtbareKommentare(rueckfragen: readonly Rueckfrage[], comments: Comment[]): Comment[] {
+  if (rueckfragen.length === 0) {
+    return comments
+  }
+  const ids = new Set(rueckfragen.map((r) => r.kommentarId))
+  return comments.filter((c) => !ids.has(c.id) && !traegtKopf(KOEPFE.antwort, c.body))
+}
+
+/** Ohne die Beiträge des Gesprächs: Sie stehen im Gespräch, nicht noch einmal als Kommentar (Issue #2219). */
+function ohneGespraech(comments: Comment[]): Comment[] {
+  return comments.filter((c) => !istGespraechsbeitrag(c.body))
+}
+
+/** Die Rückfragen der KI im Block Verlauf, vor den Kommentaren (Issue #2217); ohne Rückfrage nichts. */
+function RueckfragenAbschnitt({
+  cardId,
+  stand,
+  gesperrt,
+  api,
+}: Readonly<{
+  cardId: number
+  stand: RueckfragenStand
+  gesperrt: boolean
+  api: Pick<RueckfragenApi, 'antworten'>
+}>) {
+  if (stand.rueckfragen.length === 0) {
+    return null
+  }
+  return (
+    <>
+      <Divider />
+      <Stack spacing={1}>
+        {stand.rueckfragen.map((r) => (
+          <RueckfrageKarte
+            key={r.kommentarId}
+            cardId={cardId}
+            rueckfrage={r}
+            zuletzt={stand.zuletzt}
+            gesperrt={gesperrt}
+            api={api}
+            onBeantwortet={stand.beantwortet}
+          />
+        ))}
+      </Stack>
+    </>
+  )
+}
+
 interface Props {
   card: CardDetail
   canEdit: boolean
@@ -1283,6 +1397,10 @@ interface Props {
   vorhabenKostenApi?: Pick<VorhabenKostenApi, 'jeVorhaben'>
   /** Abruf der Entscheidungskette (Issue #2118); ohne Angabe der echte Endpunkt. */
   entscheidungsketteApi?: Pick<EntscheidungsketteApi, 'kette'>
+  /** Rückfragen der KI lesen und beantworten (Issue #2217); ohne Angabe die echten Endpunkte. */
+  rueckfragenApi?: Pick<RueckfragenApi, 'liste' | 'antworten'>
+  /** Jüngste Vorschau und Veröffentlichung des Projekts (Issue #2217); ohne Angabe der echte Endpunkt. */
+  auslieferungApi?: Pick<AuslieferungApi, 'zuletzt'>
 }
 
 /**
@@ -1309,9 +1427,30 @@ function mitBoardBindung(card: CardDetail): card is CardDetail & { boardId: numb
   return 'boardId' in card
 }
 
+/**
+ * Eine Karte aus GitLab ist nur lesend, gleich was der Aufrufer erlaubt (Issue #2170, Plan #2152
+ * A10): Der Server lehnt dort jedes Schreiben ab. Der Verweis „In GitLab öffnen“ geht nur mit
+ * erlaubtem Schema hinaus; eine andere Adresse ergibt keinen Verweis, die Karte bleibt nur lesend.
+ */
+function fremdSicht(
+  card: CardDetail,
+  canEditRolle: boolean,
+  vorschau: boolean,
+): { ausFremdsystem: boolean; externHref: string | undefined; canEdit: boolean; verlaufGesperrt: boolean } {
+  const externUrl = card.externUrl ?? null
+  const ausFremdsystem = externUrl !== null
+  return {
+    ausFremdsystem,
+    externHref: safeLinkHref(externUrl ?? undefined),
+    canEdit: canEditRolle && !ausFremdsystem,
+    // Rückfragen und Gespräch: gesperrt in der Vorschau und an einer Karte aus GitLab.
+    verlaufGesperrt: vorschau || ausFremdsystem,
+  }
+}
+
 function CardDetailModalView({
   card,
-  canEdit,
+  canEdit: canEditRolle,
   canModerateComments = false,
   onClose,
   onChanged,
@@ -1331,12 +1470,15 @@ function CardDetailModalView({
   nightRunsApi,
   vorhabenKostenApi = defaultVorhabenKostenApi,
   entscheidungsketteApi = defaultEntscheidungsketteApi,
+  rueckfragenApi = defaultRueckfragenApi,
+  auslieferungApi = defaultAuslieferungApi,
   onOpenDependency,
   neuLaden = 0,
 }: Readonly<ViewProps>) {
   const { user, vorschau: laufendeVorschau } = useAuth()
   // In der „Ansicht als XY“ ist alles Verändernde gesperrt (Plan #1914, E15).
   const vorschau = Boolean(laufendeVorschau)
+  const { ausFremdsystem, externHref, canEdit, verlaufGesperrt } = fremdSicht(card, canEditRolle, vorschau)
   const t = useT()
   const isEpic = card.type === 'EPIC'
   const [assigneeIds, setAssigneeIds] = useState<number[]>(card.assignees)
@@ -1495,7 +1637,7 @@ function CardDetailModalView({
   const [editingBody, setEditingBody] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [previews, setPreviews] = useState<Record<number, string>>({})
-  const [uploadError, setUploadError] = useState<string | null>(null)
+  const { fehler: uploadError, setFehler: setUploadError, hochladen } = useAnhangHochladen(attachmentsApi)
   const [preview, setPreview] = useState<{ attachment: Attachment; url: string } | null>(null)
   const [baum, setBaum] = useState<DerivationNode[] | null>(null)
   const [baumFehler, setBaumFehler] = useState<string | null>(null)
@@ -1521,6 +1663,10 @@ function CardDetailModalView({
   useEffect(() => {
     void cardsApi.getActivity(card.id).then(setActivities).catch(() => setActivities([]))
   }, [card.id, cardsApi])
+
+  const rueckfragenStand = useRueckfragen(card.id, projectId, rueckfragenApi, auslieferungApi, () =>
+    void commentsApi.list(card.id).then((list) => setComments([...list].reverse())),
+  )
 
   // Die volle Beschreibung beim Öffnen nachladen (Issue #769) — nach dem `aktiv`-Muster des
   // Herkunftsbaum-Effekts: Der Cleanup verwirft späte Antworten, ein Kartenwechsel setzt auf
@@ -1827,26 +1973,14 @@ function CardDetailModalView({
     }
   }
 
+  // Hochladen samt Vorschau über `useAnhangHochladen` (Issue #2220): Scheitert nur die Vorschau,
+  // steht der Anhang trotzdem in der Liste.
   const uploadFile = async (file: File) => {
-    setUploadError(null)
-    let created: Attachment
-    try {
-      created = await attachmentsApi.upload(card.id, file)
-    } catch (error_: unknown) {
-      setUploadError(apiErrorMessage(error_, t.KARTE.UPLOAD_FEHLER))
-      return
-    }
-    setAttachments((a) => [...a, created])
-    // Vorschau separat: Scheitert nur ihr Abruf, ist der Anhang trotzdem angekommen — ein erneuter
-    // Upload-Versuch waere hier ein zusaetzlicher, unnoetiger Anhang.
-    if (created.contentType.startsWith('image/')) {
-      try {
-        const blob = await attachmentsApi.fetchBlob(created.id)
-        setPreviews((p) => ({ ...p, [created.id]: URL.createObjectURL(blob) }))
-      } catch (error_: unknown) {
-        setUploadError(apiErrorMessage(error_, t.KARTE.VORSCHAU_NACH_UPLOAD_FEHLER))
-      }
-    }
+    const ergebnis = await hochladen(card.id, file)
+    if (ergebnis == null) return
+    const { anhang, vorschauUrl } = ergebnis
+    setAttachments((a) => [...a, anhang])
+    if (vorschauUrl != null) setPreviews((p) => ({ ...p, [anhang.id]: vorschauUrl }))
   }
 
   const deleteAttachment = async (id: number) => {
@@ -1931,7 +2065,7 @@ function CardDetailModalView({
             isEpic={isEpic}
             columnName={columnName}
             status={status}
-            canSetStatus={card.canSetStatus && location?.board.archived !== true}
+            canSetStatus={card.canSetStatus && !ausFremdsystem && location?.board.archived !== true}
             archived={card.archived}
             editing={editing}
             onSetStatus={setzeStatus}
@@ -1951,6 +2085,11 @@ function CardDetailModalView({
                 {t.KARTE.ABNAHME}
               </Button>
             </VorschauGesperrt>
+          )}
+          {externHref !== undefined && (
+            <Button size="small" variant="outlined" href={externHref} target="_blank" rel="noopener noreferrer">
+              {t.KARTE.IN_GITLAB_OEFFNEN}
+            </Button>
           )}
           {canEdit && !editing && (
             <VorschauGesperrt>
@@ -2182,11 +2321,29 @@ function CardDetailModalView({
                 onUpload={(file) => void uploadFile(file)}
               />
 
+              <RueckfragenAbschnitt
+                cardId={card.id}
+                stand={rueckfragenStand}
+                gesperrt={verlaufGesperrt}
+                api={rueckfragenApi}
+              />
+
+              {/* Das Gespräch mit der KI (Issue #2219), nach den Rückfragen und vor den Kommentaren. */}
+              <Divider />
+              <GespraechVerlauf
+                cardId={card.id}
+                comments={comments}
+                gesperrt={verlaufGesperrt}
+                api={commentsApi}
+                onGesendet={(neu) => setComments((c) => [neu, ...c])}
+              />
+
               <Divider />
               <CommentsSection
-                comments={comments}
+                comments={ohneGespraech(sichtbareKommentare(rueckfragenStand.rueckfragen, comments))}
                 currentUserId={user?.userId}
                 canModerateComments={canModerateComments}
+                schreibbar={!ausFremdsystem}
                 editingCommentId={editingCommentId}
                 editingBody={editingBody}
                 newComment={newComment}
@@ -2371,6 +2528,8 @@ export function CardDetailModal(props: Readonly<Props>) {
           cardsApi={cardsApi}
           vorhabenKostenApi={props.vorhabenKostenApi}
           entscheidungsketteApi={props.entscheidungsketteApi}
+          rueckfragenApi={props.rueckfragenApi}
+          auslieferungApi={props.auslieferungApi}
           onClose={() => nimmAb(eintrag)}
           onChanged={() => markiereGeaendert(eintrag.ebene)}
           onOpenDependency={onOpenDependency}

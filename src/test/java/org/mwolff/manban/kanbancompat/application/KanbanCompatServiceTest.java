@@ -1023,7 +1023,7 @@ class KanbanCompatServiceTest {
   void update_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Board-Guard schlaegt an. Faellt der requireOnBoard-Aufruf weg (Mutant), wuerde
     // eine fremde oder im Ideen-Speicher liegende Karte ueberschrieben.
-    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(9L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, 9L, BOARD);
 
     // When / Then
     KanbanPrincipal principal = bound();
@@ -1036,7 +1036,7 @@ class KanbanCompatServiceTest {
   void move_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Board-Guard der card-Fassade schlaegt an (fremdes Board oder Ideen-Speicher).
     // Fällt der requireOnBoard-Aufruf weg (Mutant), würde die Karte fälschlich verschoben.
-    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, 1L, BOARD);
 
     // When / Then
     assertThatThrownBy(() -> service.move(bound(), 1L, "DONE", 0))
@@ -1128,7 +1128,7 @@ class KanbanCompatServiceTest {
 
   @Test
   void comment_withIdempotencyKey_stillChecksTheBoardFirst() {
-    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, 1L, BOARD);
 
     assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo", "k-1", null))
         .isInstanceOf(CardNotFoundException.class);
@@ -1205,7 +1205,7 @@ class KanbanCompatServiceTest {
   void comment_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Board-Guard der card-Fassade schlaegt an. Fällt der requireOnBoard-Aufruf weg
     // (Mutant), würde der Kommentar fälschlich angelegt.
-    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, 1L, BOARD);
 
     // When / Then
     assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo", null, null))
@@ -1225,7 +1225,7 @@ class KanbanCompatServiceTest {
   void addLabel_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Board-Guard der card-Fassade schlaegt an. Fällt der requireOnBoard-Aufruf weg
     // (Mutant), bekäme eine Karte eines fremden Boards das Label.
-    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, 1L, BOARD);
 
     // When / Then
     assertThatThrownBy(() -> service.addLabel(bound(), 1L, "kit:nightrun"))
@@ -1255,7 +1255,7 @@ class KanbanCompatServiceTest {
   @Test
   void removeLabel_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: wie beim Hinzufuegen — ohne den Guard verlöre eine fremde Karte ihr Label.
-    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, 1L, BOARD);
 
     // When / Then
     assertThatThrownBy(() -> service.removeLabel(bound(), 1L, "kit:nightrun"))
@@ -1314,6 +1314,51 @@ class KanbanCompatServiceTest {
   }
 
   @Test
+  void listComments_reichtZugangsartUndKiDurch() {
+    // Given (Issue #2208, Plan #2206 E6): das Kit liest den Absender über /api/kanban/*
+    Instant at = Instant.parse("2026-01-01T10:00:00Z");
+    when(commentService.list(1L, 42L))
+        .thenReturn(
+            List.of(
+                new CommentService.CommentView(
+                    9L,
+                    42L,
+                    3L,
+                    "RZ",
+                    "## Gespräch",
+                    at,
+                    at,
+                    "TOKEN",
+                    "anbieter",
+                    null,
+                    "STANDARD",
+                    true),
+                new CommentService.CommentView(
+                    10L,
+                    42L,
+                    4L,
+                    "Kunde",
+                    "## Antwort",
+                    at,
+                    at,
+                    "TOKEN",
+                    "desktop",
+                    null,
+                    "APP",
+                    false),
+                new CommentService.CommentView(
+                    11L, 42L, 4L, "Kunde", "Hallo", at, at, "SESSION", null, null, null, false)));
+
+    // When
+    List<KanbanCompatService.Comment> result = service.listComments(bound(), 42L);
+
+    // Then
+    assertThat(result)
+        .extracting(KanbanCompatService.Comment::zugangArt, KanbanCompatService.Comment::vonKi)
+        .containsExactly(tuple("STANDARD", true), tuple("APP", false), tuple(null, false));
+  }
+
+  @Test
   void updateComment_delegatesToCommentService_whenCommentBelongsToCard() {
     // Given: der Kommentar 9 haengt an der Karte 42
     Instant at = Instant.parse("2026-01-01T10:00:00Z");
@@ -1368,7 +1413,7 @@ class KanbanCompatServiceTest {
   @Test
   void updateComment_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Board-Guard der card-Fassade schlaegt an
-    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(42L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, 42L, BOARD);
 
     // When / Then
     KanbanPrincipal principal = bound();
@@ -1399,7 +1444,7 @@ class KanbanCompatServiceTest {
   void listComments_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Lese-Guard der card-Fassade schlaegt an (fremdes Board oder Papierkorb, Issue
     // #1623). Fällt der Aufruf weg (Mutant), würden Kommentare fremder Karten lesbar.
-    doThrow(new CardNotFoundException()).when(ingest).requireReadableOnBoard(42L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireReadableOnBoard(1L, 42L, BOARD);
 
     // When / Then
     KanbanPrincipal principal = bound();
@@ -1472,7 +1517,7 @@ class KanbanCompatServiceTest {
   void listActivity_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Lese-Guard der card-Fassade schlaegt an (fremdes Board oder Papierkorb, Issue
     // #1623). Fällt der Aufruf weg (Mutant), würde der Verlauf fremder Karten lesbar.
-    doThrow(new CardNotFoundException()).when(ingest).requireReadableOnBoard(42L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireReadableOnBoard(1L, 42L, BOARD);
 
     // When / Then
     KanbanPrincipal principal = bound();
@@ -1630,7 +1675,7 @@ class KanbanCompatServiceTest {
     // Anlegen und Abhängigkeiten adressieren das Projekt selbst und haben keine Kartengrenze.
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
     doThrow(new FremdesBoardException()).when(boardQuelle).pruefeSchreibbar(PROJECT);
-    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(42L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, 42L, BOARD);
 
     // When / Then
     if ("create".equals(name) || "replaceDependencies".equals(name)) {

@@ -326,6 +326,42 @@ public class PermissionChecker {
     return echteRolleVorhanden(userId, projectId, ProjectRole.OWNER, ProjectRole.ADMIN);
   }
 
+  /**
+   * Ob der Benutzer einen eigenen App-Zugang anlegen und halten darf (Plan #2206, E3): echte Rolle
+   * OWNER, ADMIN oder CUSTOMER. Ein Plattform-Admin ohne eigene Mitgliedschaft ist auch hier ein
+   * Nichtmitglied — für Module außerhalb von {@code project}, die {@link ProjectRole} nicht sehen
+   * dürfen.
+   */
+  @Transactional(readOnly = true)
+  public boolean istEchterAppInhaber(long userId, long projectId) {
+    return echteRolleVorhanden(
+        userId, projectId, ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.CUSTOMER);
+  }
+
+  /**
+   * Ob der Benutzer im Projekt echt die Rolle Kunde hat (Issue #2216, Plan #2206 E12) — für Module
+   * außerhalb von {@code project}, die {@link ProjectRole} nicht sehen dürfen. Ein Plattform-Admin
+   * ohne eigene Mitgliedschaft ist kein Kunde.
+   */
+  @Transactional(readOnly = true)
+  public boolean istEchterKunde(long userId, long projectId) {
+    return echteRolleVorhanden(userId, projectId, ProjectRole.CUSTOMER);
+  }
+
+  /**
+   * {@link #istEchterAppInhaber} mit Wurf (Issue #2212) — für das Anlegen und Erneuern eines
+   * App-Zugangs, die ein Nichtmitglied mit 404 und ein Mitglied ohne passende Rolle mit 403
+   * abweisen.
+   *
+   * @throws ProjectNotFoundException wenn der Benutzer keine echte Mitgliedschaft hat (404)
+   * @throws ProjectAccessDeniedException wenn die echte Rolle weder OWNER, ADMIN noch CUSTOMER ist
+   *     (403)
+   */
+  @Transactional(readOnly = true)
+  public void requireEchterAppInhaber(long userId, long projectId) {
+    pruefeEchteRolle(userId, projectId, ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.CUSTOMER);
+  }
+
   /** {@link #hatEchteRolle} ohne eigene Transaktion, für den Aufruf innerhalb dieser Klasse. */
   private boolean echteRolleVorhanden(long userId, long projectId, ProjectRole... erlaubt) {
     return memberships

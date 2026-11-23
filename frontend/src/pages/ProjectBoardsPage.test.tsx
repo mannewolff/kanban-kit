@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { cssRegel } from '../test/cssRegel'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi, type Board } from '../api/boards'
 import { ApiError } from '../api/client'
 import { projectsApi } from '../api/projects'
+import { anbieterApi } from '../api/anbieter'
+import { auslieferungApi } from '../api/auslieferung'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import { ProjectBoardsPage } from './ProjectBoardsPage'
 import { renderMitSprache } from '../i18n/renderMitSprache'
@@ -38,11 +40,24 @@ function makeBoards(names: string[], projectId: number): Board[] {
 
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 // Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
-const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+const auth = vi.hoisted(() => ({
+  vorschau: null as null | Record<string, string>,
+  // Die angemeldete Person; `null` heißt: Die Rolle kommt erst aus der Projektliste (Issue #2218).
+  user: null as null | { memberships: Array<{ projectId: number; role: string }> },
+}))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau, user: auth.user }) }))
 const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+// „Wartet auf dich“ oben auf der Seite (Issue #2218): ohne eigene Angabe wartet nichts.
+vi.mock('../api/anbieter', () => ({ anbieterApi: { wartetAufDich: vi.fn(), lage: vi.fn() } }))
+vi.mock('../api/auslieferung', () => ({ auslieferungApi: { zuletzt: vi.fn() } }))
+const mockedAnbieter = anbieterApi as unknown as { wartetAufDich: ReturnType<typeof vi.fn>; lage: ReturnType<typeof vi.fn> }
+const mockedAuslieferung = auslieferungApi as unknown as { zuletzt: ReturnType<typeof vi.fn> }
 beforeEach(() => {
   auth.vorschau = null
+  auth.user = null
+  mockedAnbieter.wartetAufDich.mockReset().mockResolvedValue([])
+  mockedAnbieter.lage.mockReset().mockResolvedValue({ nichtErreichbar: false, boards: [] })
+  mockedAuslieferung.zuletzt.mockReset().mockResolvedValue({ vorschau: null, veroeffentlichung: null })
 })
 vi.mock('../api/boards', () => ({
   boardsApi: {
@@ -65,10 +80,10 @@ const mockedBoards = boardsApi as unknown as {
   purge: ReturnType<typeof vi.fn>
 }
 
-function renderAt(role: string, boards: Array<{ id: number; name: string }>) {
+function renderAt(role: string, boards: Array<{ id: number; name: string; columns?: Board['columns'] }>) {
   mockedProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role, createdAt: '' }])
   mockedBoards.list.mockResolvedValue(
-    boards.map((b) => ({ ...b, projectId: 5, createdAt: '', columns: [] })),
+    boards.map((b) => ({ projectId: 5, createdAt: '', columns: [], ...b })),
   )
   mockedBoards.listArchived.mockResolvedValue([])
   return render(
@@ -668,7 +683,8 @@ describe('ProjectBoardsPage — Ansicht als XY (Issue #1927)', () => {
     expect(screen.queryByLabelText('Board Aktiv archivieren')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Board Altes Board endgültig löschen')).not.toBeInTheDocument()
     const knoepfe = screen.getAllByRole('button', { name: 'Vorschau' })
-    expect(knoepfe.map((k) => k.textContent)).toEqual(['Anlegen', '', '', 'Wiederherstellen', ''])
+    // „Idee einstellen“ (Issue #2220) steht in der Kopfzeile und ist in der Vorschau ebenso gesperrt.
+    expect(knoepfe.map((k) => k.textContent)).toEqual(['Idee einstellen', 'Anlegen', '', '', 'Wiederherstellen', ''])
     knoepfe.forEach((k) => {
       expect(k).toBeDisabled()
       fireEvent.click(k)
@@ -689,5 +705,138 @@ describe('ProjectBoardsPage — Ansicht als XY (Issue #1927)', () => {
     expect(screen.getByRole('button', { name: 'Wiederherstellen' })).toBeEnabled()
     expect(screen.getByLabelText('Board Altes Board endgültig löschen')).toBeEnabled()
     expect(screen.queryByRole('button', { name: 'Vorschau' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Startseite des Projekts für den Kunden (Issue #2218)', () => {
+  function zeigeSolo() {
+    mockedBoards.list.mockResolvedValue([{ id: 9, name: 'Solo', projectId: 5, createdAt: '', columns: [] }])
+    mockedBoards.listArchived.mockResolvedValue([])
+    return render(
+      <MemoryRouter initialEntries={['/projects/5']}>
+        <Routes>
+          <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+          <Route path="/boards/:boardId/leitstand" element={<div>Board-Ansicht</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('lässt einen Kunden mit einem Board auf der Startseite und zeigt oben, was auf ihn wartet', async () => {
+    mockedProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role: 'CUSTOMER', createdAt: '' }])
+    mockedAnbieter.wartetAufDich.mockResolvedValue([
+      { cardId: 812, boardId: 9, number: 41, title: 'Export als CSV', grund: 'RUECKFRAGE' },
+    ])
+    zeigeSolo()
+
+    expect(await screen.findByRole('heading', { name: 'Wartet auf dich' })).toBeInTheDocument()
+    await waitFor(() => expect(mockedProjects.list).toHaveBeenCalled())
+    await screen.findByText('Team')
+    expect(screen.queryByText('Board-Ansicht')).not.toBeInTheDocument()
+    expect(mockedAnbieter.wartetAufDich).toHaveBeenCalledWith(5)
+    // Nach der Kopfzeile, über der Board-Liste.
+    const abschnitt = screen.getByRole('region', { name: 'Stand beim Anbieter' })
+    const board = screen.getByRole('link', { name: 'Solo' })
+    expect(abschnitt.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Projekte' }).compareDocumentPosition(abschnitt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('leitet ein Mitglied mit einem Board erst nach bekannter Rolle weiter', async () => {
+    const projekte = deferred<Array<{ id: number; name: string; role: string; createdAt: string }>>()
+    mockedProjects.list.mockReturnValue(projekte.promise)
+    zeigeSolo()
+
+    expect(await screen.findByRole('link', { name: 'Solo' })).toBeInTheDocument()
+    await waitFor(() => expect(mockedBoards.list).toHaveBeenCalled())
+    expect(screen.queryByText('Board-Ansicht')).not.toBeInTheDocument()
+
+    projekte.resolve([{ id: 5, name: 'Team', role: 'MEMBER', createdAt: '' }])
+
+    expect(await screen.findByText('Board-Ansicht')).toBeInTheDocument()
+  })
+
+  it('nimmt die Rolle aus der Anmeldung, ohne auf die Projektliste zu warten', async () => {
+    auth.user = { memberships: [{ projectId: 4, role: 'CUSTOMER' }, { projectId: 5, role: 'MEMBER' }] }
+    mockedProjects.list.mockReturnValue(new Promise(() => {}))
+    zeigeSolo()
+
+    expect(await screen.findByText('Board-Ansicht')).toBeInTheDocument()
+  })
+
+  it('lässt einen Kunden laut Anmeldung auf der Startseite, auch wenn die Projektliste anderes sagt', async () => {
+    auth.user = { memberships: [{ projectId: 5, role: 'CUSTOMER' }] }
+    mockedProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role: 'MEMBER', createdAt: '' }])
+    zeigeSolo()
+
+    await screen.findByText('Team')
+    expect(screen.queryByText('Board-Ansicht')).not.toBeInTheDocument()
+  })
+
+  it('leitet nicht weiter, wenn die Rolle unbekannt bleibt', async () => {
+    mockedProjects.list.mockResolvedValue([{ id: 6, name: 'Anderes', role: 'MEMBER', createdAt: '' }])
+    zeigeSolo()
+
+    await screen.findByRole('link', { name: 'Solo' })
+    await waitFor(() => expect(mockedProjects.list).toHaveBeenCalled())
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(screen.queryByText('Board-Ansicht')).not.toBeInTheDocument()
+  })
+})
+
+/** Knopf „Idee einstellen“ für alle, die Karten anlegen dürfen (Issue #2220, Plan #2206 E13). */
+describe('ProjectBoardsPage — Idee einstellen', () => {
+  const zwei = [
+    { id: 9, name: 'Board A', columns: [{ id: 91, name: 'Backlog', position: 0, wipLimit: null }] },
+    { id: 10, name: 'Board B', columns: [] },
+  ]
+
+  it.each(['CUSTOMER', 'MEMBER'])('zeigt den Knopf für %s und öffnet den Dialog', async (rolle) => {
+    renderAt(rolle, zwei)
+    fireEvent.click(await screen.findByRole('button', { name: 'Idee einstellen' }))
+    expect(await screen.findByRole('dialog', { name: 'Idee einstellen' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Deine Idee')).toBeInTheDocument()
+  })
+
+  it('zeigt den Knopf nicht für Betrachter', async () => {
+    renderAt('VIEWER', zwei)
+    expect(await screen.findByText('Board A')).toBeInTheDocument()
+    await waitFor(() => expect(mockedProjects.list).toHaveBeenCalled())
+    await screen.findByText('Team')
+    expect(screen.queryByRole('button', { name: 'Idee einstellen' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt den Knopf nicht ohne Board', async () => {
+    renderPage('MEMBER')
+    expect(await screen.findByText('Team')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Idee einstellen' })).not.toBeInTheDocument()
+  })
+
+  it('schließt den Dialog mit Abbrechen', async () => {
+    renderAt('MEMBER', zwei)
+    fireEvent.click(await screen.findByRole('button', { name: 'Idee einstellen' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Abbrechen' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+})
+
+vi.mock('../api/cards', () => ({ cardsApi: { create: vi.fn() } }))
+
+describe('ProjectBoardsPage — Idee eingestellt', () => {
+  it('meldet die eingestellte Idee und schließt den Dialog', async () => {
+    const { cardsApi } = await import('../api/cards')
+    ;(cardsApi.create as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 77 })
+    renderAt('CUSTOMER', [
+      { id: 9, name: 'Board A', columns: [{ id: 91, name: 'Backlog', position: 0, wipLimit: null }] },
+      { id: 10, name: 'Board B', columns: [] },
+    ])
+    fireEvent.click(await screen.findByRole('button', { name: 'Idee einstellen' }))
+    fireEvent.change(await screen.findByLabelText('Deine Idee'), { target: { value: 'Export als CSV' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Einstellen' }))
+
+    expect(await screen.findByText('Idee eingestellt.')).toBeInTheDocument()
+    expect(cardsApi.create).toHaveBeenCalledWith(9, 91, '[Idea] Export als CSV')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 })

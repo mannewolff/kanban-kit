@@ -57,7 +57,14 @@ class CardCycleTimeServiceTest {
     boardService = mock(BoardService.class);
     permissions = mock(PermissionChecker.class);
     Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
-    service = new CardCycleTimeService(cards, transitions, boardService, permissions, clock);
+    service =
+        new CardCycleTimeService(
+            cards,
+            transitions,
+            boardService,
+            permissions,
+            clock,
+            new Anbietersicht(cards, mock(KartenZuordnung.class), permissions));
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
     stub(List.of(), List.of(), List.of());
   }
@@ -639,7 +646,13 @@ class CardCycleTimeServiceTest {
     // … und die Dashboard-Kennzahl sieht die Implementierungszeit.
     when(cards.findByBoardId(BOARD)).thenReturn(List.of(karte[0]));
     CardCycleTimeService kennzahlen =
-        new CardCycleTimeService(cards, verlauf, boardService, permissions, uhr);
+        new CardCycleTimeService(
+            cards,
+            verlauf,
+            boardService,
+            permissions,
+            uhr,
+            new Anbietersicht(cards, mock(KartenZuordnung.class), permissions));
     BoardDashboardKpis kpis = kennzahlen.dashboard(5L, BOARD);
     assertThat(kpis.avgImplementationSeconds()).isEqualTo(3600L).isPositive();
     assertThat(kpis.implementationSampleCount()).isEqualTo(1);

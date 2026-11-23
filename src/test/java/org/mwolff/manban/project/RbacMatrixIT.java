@@ -44,7 +44,8 @@ class RbacMatrixIT extends AbstractIntegrationTest {
             Permission.EPIC_READ,
             Permission.TICKET_READ,
             Permission.COMMENT_READ,
-            Permission.ATTACHMENT_READ);
+            Permission.ATTACHMENT_READ,
+            Permission.REPAIR_READ);
 
     Set<Permission> member = EnumSet.copyOf(reads);
     member.addAll(
@@ -71,7 +72,12 @@ class RbacMatrixIT extends AbstractIntegrationTest {
             Permission.MEMBER_INVITE,
             Permission.MEMBER_REMOVE));
 
+    // Kunde: die Rechte eines Mitglieds ohne die Störungen beim Anbieter (Plan #2206, E1, E2).
+    Set<Permission> customer = EnumSet.copyOf(member);
+    customer.remove(Permission.REPAIR_READ);
+
     EXPECTED.put(ProjectRole.VIEWER, reads);
+    EXPECTED.put(ProjectRole.CUSTOMER, customer);
     EXPECTED.put(ProjectRole.MEMBER, member);
     EXPECTED.put(ProjectRole.ADMIN, admin);
     EXPECTED.put(ProjectRole.OWNER, EnumSet.allOf(Permission.class));
@@ -98,6 +104,24 @@ class RbacMatrixIT extends AbstractIntegrationTest {
             .as("Rolle %s Recht %s", role, permission)
             .isEqualTo(expected);
       }
+    }
+  }
+
+  @Test
+  void kundeHatJedesRechtEinesMitgliedsAusserDenStoerungen() {
+    for (Permission permission : Permission.values()) {
+      boolean erwartet =
+          permission != Permission.REPAIR_READ
+              && rolePermissions.isGranted(ProjectRole.MEMBER, permission);
+      assertThat(rolePermissions.isGranted(ProjectRole.CUSTOMER, permission))
+          .as("Kunde, Recht %s", permission)
+          .isEqualTo(erwartet);
+    }
+    for (ProjectRole rolle :
+        EnumSet.of(ProjectRole.VIEWER, ProjectRole.MEMBER, ProjectRole.ADMIN, ProjectRole.OWNER)) {
+      assertThat(rolePermissions.isGranted(rolle, Permission.REPAIR_READ))
+          .as("%s sieht Störungen", rolle)
+          .isTrue();
     }
   }
 

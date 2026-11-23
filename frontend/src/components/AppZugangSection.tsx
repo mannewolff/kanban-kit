@@ -32,8 +32,10 @@ interface Aktion {
 }
 
 /**
- * Verwaltung des Zugangs der Desktop-App (Plan #2100): je Board, in dessen Projekt der Angemeldete
- * Admin oder Owner ist, eine Zeile. Der Klartext steht nur im Zustand dieses Abschnitts, bis er
+ * Verwaltung des Zugangs der Desktop-App (Plan #2100; Plan #2206, E3, E4): zeigt die Zeilen, die der
+ * Server liefert — je Board, in dessen Projekt der Angemeldete Owner, Admin oder Kunde ist, die
+ * eigene Zeile, für einen Owner oder Admin darunter die Zugänge der anderen Personen am Board. Ein
+ * Board kann darum mehrere Zeilen haben. Der Klartext steht nur im Zustand dieses Abschnitts, bis er
  * geschlossen wird; die Liste liefert ihn nie.
  */
 export function AppZugangSection() {
@@ -164,7 +166,7 @@ export function AppZugangSection() {
           <Stack spacing={0.75}>
             {zeilen.map((z) => (
               <Box
-                key={z.boardId}
+                key={`${z.boardId}-${z.tokenId ?? 'eigene'}`}
                 sx={{
                   display: 'flex',
                   alignItems: 'center',

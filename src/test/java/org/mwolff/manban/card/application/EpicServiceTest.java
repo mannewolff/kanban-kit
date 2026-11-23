@@ -308,7 +308,8 @@ class EpicServiceTest {
             mock(KartenGrundlage.class),
             mock(KartenSicht.class),
             massenzuordnung,
-            Clock.fixed(FIXED, ZoneOffset.UTC));
+            Clock.fixed(FIXED, ZoneOffset.UTC),
+            mock(Anbietersicht.class));
 
     // When / Then
     assertThat(fassade.assignParentBulk(1L, List.of(1L, 2L), 30L)).isSameAs(ergebnis);
@@ -717,6 +718,24 @@ class EpicServiceTest {
     assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V", null))
         .isExactlyInstanceOf(InvalidDependencyException.class)
         .hasMessageContaining("bereits einem Vorhaben zugeordnet");
+
+    verify(cards, never()).save(any());
+  }
+
+  /**
+   * Aus einer dem Aufrufer verborgenen Karte (Reparatur-Label, kein {@code REPAIR_READ}) entsteht
+   * kein Vorhaben, sie gilt als unbekannt (Issue #2233).
+   */
+  @Test
+  void openEpicFromCard_verborgeneQuelle_wirdAbgelehnt() {
+    Card quelle = card(1L, 20L, 7, false, null, CardType.CARD, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
+    when(cardLabels.kartenMitLabel(PROJECT, "kit:repair")).thenReturn(List.of(1L));
+    when(cards.findByIds(List.of(1L))).thenReturn(List.of(quelle));
+
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V", null))
+        .isExactlyInstanceOf(CardNotFoundException.class);
 
     verify(cards, never()).save(any());
   }

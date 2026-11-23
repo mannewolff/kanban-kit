@@ -28,6 +28,10 @@ import org.springframework.transaction.annotation.Transactional;
  * zugänglichen Projekten fragt. Rechte über den {@link PermissionChecker} bzw. die Projektauswahl
  * des {@link ProjectService}.
  */
+// PMD.CouplingBetweenObjects: Mit Issue #2211 kommt Anbietersicht dazu. Jede Suche löst Karten
+// für einen Aufrufer auf, und genau dort verbirgt sie Reparaturkarten vor Kunden; ein eigener
+// Baustein je Suchweg wäre eine Abschrift des Filters (Plan #2206 E18).
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class CardSearchService {
 
@@ -37,6 +41,7 @@ public class CardSearchService {
   private final PermissionChecker permissions;
   private final ProjectService projects;
   private final KartenSicht sicht;
+  private final Anbietersicht anbieter;
 
   public CardSearchService(
       CardRepository cards,
@@ -44,13 +49,15 @@ public class CardSearchService {
       BoardService boardService,
       PermissionChecker permissions,
       ProjectService projects,
-      KartenSicht sicht) {
+      KartenSicht sicht,
+      Anbietersicht anbieter) {
     this.cards = cards;
     this.bestand = bestand;
     this.boardService = boardService;
     this.permissions = permissions;
     this.projects = projects;
     this.sicht = sicht;
+    this.anbieter = anbieter;
   }
 
   /**
@@ -63,6 +70,7 @@ public class CardSearchService {
     permissions.requireMembership(userId, projectId);
     Card card =
         cards.findByProjectIdAndNumber(projectId, number).orElseThrow(CardNotFoundException::new);
+    anbieter.pruefeSichtbar(userId, card);
     return sicht.view(userId, card);
   }
 
@@ -86,6 +94,11 @@ public class CardSearchService {
             // Wertvergleich der Board-IDs (Long), wie in CardIngestService.requireOnBoard.
             .filter(k -> Long.valueOf(boardId).equals(k.boardId()))
             .orElseThrow(CardNotFoundException::new);
+    Set<Integer> verborgen = anbieter.verborgeneNummern(userId, projectId);
+    if (verborgen.contains(c.number())) {
+      throw new CardNotFoundException();
+    }
+    Integer herkunft = sicht.herkunftsnummer(c);
     String status = statusName(c);
     String spalte = boardService.requireColumn(c.columnId(), boardId).name();
     return new BoardCardView(
@@ -98,7 +111,7 @@ public class CardSearchService {
             c.positionInColumn(),
             c.type() == CardType.EPIC,
             c.externalKey(),
-            sicht.herkunftsnummer(c),
+            herkunft == null || verborgen.contains(herkunft) ? null : herkunft,
             status),
         Kartenart.von(c.type(), c.title()).name(),
         CardIngestService.kanbanSchluessel(status, spalte),
@@ -137,7 +150,10 @@ public class CardSearchService {
         q == null ? Map.of() : bestand.textFundstellenAufBoard(boardId, q);
     return KartenBestandSuche.alsSicht(
         KartenBestandSuche.suche(
-            cards.findByBoardId(boardId), geprueft, textFundstellen, kommentarFunde),
+            anbieter.sichtbare(userId, projectId, cards.findByBoardId(boardId)),
+            geprueft,
+            textFundstellen,
+            kommentarFunde),
         spalten);
   }
 
@@ -155,7 +171,9 @@ public class CardSearchService {
   public Kette lineageOnBoard(long userId, long boardId, int number) {
     long projectId = boardService.requireProjectId(boardId);
     permissions.requireMembership(userId, projectId);
-    List<Card> boardKarten = cards.findByBoardId(boardId);
+    // Verborgene Karten fehlen in der Kette; die gesuchte endet wie eine unbekannte (#2211).
+    Set<Integer> verborgen = anbieter.verborgeneNummern(userId, projectId);
+    List<Card> boardKarten = Anbietersicht.ohneVerborgene(cards.findByBoardId(boardId), verborgen);
     Card karte =
         boardKarten.stream()
             .filter(c -> c.number() == number)
@@ -167,7 +185,9 @@ public class CardSearchService {
     return HerkunftsKette.berechne(
         karte,
         boardKarten,
-        id -> cards.findByIds(List.of(id)).stream().findFirst(),
+        id ->
+            Anbietersicht.ohneVerborgene(cards.findByIds(List.of(id)), verborgen).stream()
+                .findFirst(),
         bestand.verloreneHerkunftsnummern(boardId),
         spalten);
   }
@@ -209,6 +229,7 @@ public class CardSearchService {
       return List.of();
     }
     return cards.findByNumberInProjects(number, List.copyOf(projectNames.keySet())).stream()
+        .filter(c -> !anbieter.istVerborgen(userId, c.projectId(), c))
         .map(c -> hit(userId, c, Objects.requireNonNull(projectNames.get(c.projectId()))))
         .toList();
   }

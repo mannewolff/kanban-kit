@@ -83,4 +83,16 @@ class JdbcCardLabelRepository implements CardLabelRepository {
                     .add(rs.getLong("label_id")));
     return byCard;
   }
+
+  @Override
+  public List<Long> kartenMitLabel(long projectId, String name) {
+    return jdbc.queryForList(
+        "SELECT DISTINCT c.id FROM card c"
+            + " JOIN card_label cl ON cl.card_id = c.id"
+            + " JOIN label l ON l.id = cl.label_id"
+            + " WHERE c.project_id = :projectId AND l.name = :name"
+            + " ORDER BY c.id",
+        Map.of("projectId", projectId, "name", name),
+        Long.class);
+  }
 }

@@ -575,6 +575,14 @@ auf jedem Board des Projekts dieselben Zahlen. Dieselbe Meldung (gleiche Kennung
 ein erneut gestarteter Lauf trägt eine neue Kennung und zählt als eigener Versuch. Ein Lauf, der
 nichts meldet, zählt nicht.
 
+**Vorschau und Veröffentlichung:** Eine Meldung kann sagen, ob sie eine **Vorschau** oder eine
+**Veröffentlichung** ist, und die Adresse nennen, unter der sie zu sehen ist (nur `https`). Eine
+Vorschau zählt in **keiner** Kennzahl der Platte; eine Veröffentlichung zählt wie eine Auslieferung,
+und eine Meldung ohne diese Angabe zählt wie bisher als Veröffentlichung. Ein Commit, den zuerst eine
+Vorschau meldete, zählt bei der Veröffentlichung, die ihn ausliefert. Die jüngste Vorschau und die
+jüngste Veröffentlichung eines Projekts mit Adresse liest jedes Projektmitglied über
+`GET /api/projects/{projectId}/auslieferung/zuletzt`.
+
 **Das Fenster** sind die letzten 12 Wochen (84 Tage bis jetzt); maßgeblich ist der gemeldete
 Zeitpunkt des Ausgangs, nicht der Eingang der Meldung. Liegt die erste Meldung später, steht im Kopf
 „seit ‹Datum›“ statt „letzte 12 Wochen“.
@@ -1324,7 +1332,9 @@ mit dem festen Satz der Labels, die das claude-workflow-kit, die Laufsteuerung u
   `kit:on-hold` (ein Fachplan wartet auf ein äußeres Ereignis; nur ein Mensch hebt das Warten auf),
   `kit:repair` (Reparaturkarte der Kartenprüfung, gesetzt vom Runner), `kit:hotfix` (Karte eines
   Hotfix, der noch nicht nachgeholt ist), `kit:manual` (Karte vom Taktgeber des Kits ausgenommen;
-  setzt und nimmt nur ein Mensch ab)
+  setzt und nimmt nur ein Mensch ab), `kit:provider` (Karte steht beim Anbieter in Arbeit; setzt und
+  nimmt das Rechenzentrum ab), `kit:approval` (eine Freigabe des Kunden steht aus; setzt und nimmt das
+  Rechenzentrum ab)
 - **Lauf:** `run:aborted`, `run:running`, `run:waiting`
 - **Review:** `review:offen`, `review:done`
 - **Stufenleiste:** `goal:plan`, `goal:packages`, `goal:implementation`, `goal:push-prepared`,

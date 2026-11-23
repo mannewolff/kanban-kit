@@ -968,6 +968,15 @@ const mitMehrerenPlaetzen = (l: RohLauf): boolean =>
   Number.isInteger(l.concurrentPackages) && (l.concurrentPackages as number) > 1
 
 /**
+ * Ob die Einheit die Angaben je Paket traegt (Issue #2255): Sie fuehrt `gleichzeitig` als
+ * Wahrheitswert — dieselbe Erkennung wie im Kit (Plan #2546, A7), unabhaengig von der Platzzahl.
+ * Eine Nacht mit mehreren Plaetzen fuellt die Angaben weiter an jedem Paket auf, auch an einem
+ * uebergangenen ohne `gleichzeitig`.
+ */
+const fuehrtGleichzeitigkeit = (e: RohEinheit, mehrerePlaetze: boolean): boolean =>
+  mehrerePlaetze || typeof e.gleichzeitig === 'boolean'
+
+/**
  * Erfolg und Fehlschlag: Ihre Farbe haengt am Pruefblock. Jedes fehlende Glied der Kette gibt
  * `null` — ein Ausgang aus einer Runde ohne Pruefblock ist unvollstaendig, die Farbe haengt am
  * Nachweis, und ohne ihn bliebe nur Raten.
@@ -998,7 +1007,7 @@ function deuteEinheit(e: RohEinheit, modus: NightRunMode): (Farbe & { excerpt: s
 }
 
 /** Eine Einheit in ein Arbeitspaket der Auswertung uebersetzen. */
-function baueItem(e: RohEinheit, position: number, modus: NightRunMode, gleichzeitig: boolean): NightRunItem | null {
+function baueItem(e: RohEinheit, position: number, modus: NightRunMode, mehrerePlaetze: boolean): NightRunItem | null {
   const deutung = deuteEinheit(e, modus)
   if (!deutung) return null
   const dauer = dauerDerEinheit(e)
@@ -1027,8 +1036,9 @@ function baueItem(e: RohEinheit, position: number, modus: NightRunMode, gleichze
     ausgang: e.ausgang,
     ...(stuck === undefined ? {} : { stuck }),
     ...(attempts === undefined ? {} : { attempts }),
-    // An jedem Paket einer Nacht mit mehreren Plaetzen, sonst an keinem (Plan #1876, E9).
-    ...(gleichzeitig ? gleichzeitigkeitDerEinheit(e) : {}),
+    // An jedem Paket einer Nacht mit mehreren Plaetzen (Plan #1876, E9), sonst an jedem, das
+    // `gleichzeitig` als Wahrheitswert fuehrt (Issue #2255).
+    ...(fuehrtGleichzeitigkeit(e, mehrerePlaetze) ? gleichzeitigkeitDerEinheit(e) : {}),
   }
 }
 
@@ -1100,10 +1110,10 @@ export function parseNightRunErgebnisstand(text: string): NightRunErgebnisstandR
   }
 
   const einheiten = lauf.einheiten as RohEinheit[]
-  const gleichzeitig = mitMehrerenPlaetzen(lauf)
+  const mehrerePlaetze = mitMehrerenPlaetzen(lauf)
   const items: NightRunItem[] = []
   for (const [position, e] of einheiten.entries()) {
-    const item = baueItem(e, position, modus, gleichzeitig)
+    const item = baueItem(e, position, modus, mehrerePlaetze)
     if (!item) return abgelehnt(lauf, 'nicht-unterstuetzt', e.ausgang)
     items.push(item)
   }

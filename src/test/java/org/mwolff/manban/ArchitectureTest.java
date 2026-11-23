@@ -261,6 +261,10 @@ class ArchitectureTest {
           // fremden Boards fragt, ob das Projekt Karten hat und ob ein Board je Status eine Spalte
           // hat, samt Record KartenBestand.
           "FremdKartenBestand",
+          // Anbietersicht ist Vertrag (Issue #2211, Plan #2206 E2, E18): Was ein Kunde ohne
+          // REPAIR_READ nicht sieht, entscheidet genau eine Stelle; nightrun und die
+          // Composition-Root (Board-Ereignisse) fragen sie, statt den Filter abzuschreiben.
+          "Anbietersicht",
           // Exception-Vokabular als Vertrag, Plan #1694 (A4)
           "CardNotFoundException");
 

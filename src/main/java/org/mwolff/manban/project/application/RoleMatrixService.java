@@ -22,7 +22,12 @@ public class RoleMatrixService {
 
   /** Anzeige-Reihenfolge der eingebauten Rollen (von wenig zu viel Rechten). */
   private static final List<ProjectRole> DISPLAY_ORDER =
-      List.of(ProjectRole.VIEWER, ProjectRole.MEMBER, ProjectRole.ADMIN, ProjectRole.OWNER);
+      List.of(
+          ProjectRole.VIEWER,
+          ProjectRole.CUSTOMER,
+          ProjectRole.MEMBER,
+          ProjectRole.ADMIN,
+          ProjectRole.OWNER);
 
   private final RolePermissionRepository rolePermissions;
 
@@ -72,7 +77,7 @@ public class RoleMatrixService {
   public record RoleMatrixView(
       @Schema(
               description = "Die Projekt-Rollen, von wenig zu viel Rechten.",
-              example = "[\"VIEWER\", \"MEMBER\", \"ADMIN\", \"OWNER\"]")
+              example = "[\"VIEWER\", \"CUSTOMER\", \"MEMBER\", \"ADMIN\", \"OWNER\"]")
           List<String> roles,
       @Schema(description = "Alle Rechte, nach Ressource gruppiert.")
           List<PermissionView> permissions,

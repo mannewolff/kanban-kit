@@ -38,16 +38,20 @@ class RoleMatrixIT extends AbstractIntegrationTest {
         mvc.perform(get("/api/roles/matrix").cookie(session))
             .andExpect(status().isOk())
             // Rollen in Anzeige-Reihenfolge
-            .andExpect(jsonPath("$.roles.length()").value(4))
+            .andExpect(jsonPath("$.roles.length()").value(5))
             .andExpect(jsonPath("$.roles[0]").value("VIEWER"))
-            .andExpect(jsonPath("$.roles[3]").value("OWNER"))
+            .andExpect(jsonPath("$.roles[1]").value("CUSTOMER"))
+            .andExpect(jsonPath("$.roles[2]").value("MEMBER"))
+            .andExpect(jsonPath("$.roles[4]").value("OWNER"))
             // Rechte inkl. abgeleiteter Ressource/Operation
-            .andExpect(jsonPath("$.permissions.length()").value(27))
-            // Grants je Rolle passend zum V4-Seed plus den drei Sonderregeln aus V45 (nur OWNER)
-            .andExpect(jsonPath("$.grants.VIEWER.length()").value(5))
-            .andExpect(jsonPath("$.grants.MEMBER.length()").value(16))
-            .andExpect(jsonPath("$.grants.ADMIN.length()").value(22))
-            .andExpect(jsonPath("$.grants.OWNER.length()").value(27))
+            .andExpect(jsonPath("$.permissions.length()").value(28))
+            // Grants je Rolle passend zum V4-Seed, den drei Sonderregeln aus V45 (nur OWNER)
+            // und REPAIR_READ aus V79 (alle außer CUSTOMER)
+            .andExpect(jsonPath("$.grants.VIEWER.length()").value(6))
+            .andExpect(jsonPath("$.grants.CUSTOMER.length()").value(16))
+            .andExpect(jsonPath("$.grants.MEMBER.length()").value(17))
+            .andExpect(jsonPath("$.grants.ADMIN.length()").value(23))
+            .andExpect(jsonPath("$.grants.OWNER.length()").value(28))
             .andReturn()
             .getResponse()
             .getContentAsString();
@@ -65,6 +69,13 @@ class RoleMatrixIT extends AbstractIntegrationTest {
     assertThat(JsonPath.<List<Object>>read(body, "$.grants.MEMBER"))
         .doesNotContain("COMMENT_DELETE");
     assertThat(JsonPath.<List<Object>>read(body, "$.grants.ADMIN")).contains("COMMENT_DELETE");
+    // Störungen: eigene Ressource REPAIR, Kunden ausgenommen (Plan #2206, E2)
+    assertThat(JsonPath.<List<Object>>read(body, "$.permissions[?(@.key=='REPAIR_READ')].resource"))
+        .containsExactly("REPAIR");
+    assertThat(JsonPath.<List<Object>>read(body, "$.grants.VIEWER")).contains("REPAIR_READ");
+    assertThat(JsonPath.<List<Object>>read(body, "$.grants.CUSTOMER"))
+        .contains("TICKET_CREATE")
+        .doesNotContain("REPAIR_READ");
   }
 
   /**
@@ -91,7 +102,7 @@ class RoleMatrixIT extends AbstractIntegrationTest {
       assertThat(JsonPath.<List<Object>>read(body, "$.grants.OWNER"))
           .as("OWNER ohne %s", key)
           .contains(key);
-      for (String rolle : List.of("VIEWER", "MEMBER", "ADMIN")) {
+      for (String rolle : List.of("VIEWER", "CUSTOMER", "MEMBER", "ADMIN")) {
         assertThat(JsonPath.<List<Object>>read(body, "$.grants." + rolle))
             .as("%s hätte %s nicht bekommen dürfen", rolle, key)
             .doesNotContain(key);

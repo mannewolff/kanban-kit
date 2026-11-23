@@ -45,7 +45,8 @@ class KartenGrundlageAktivitaetTest {
           actor,
           mock(ApplicationEventPublisher.class),
           Clock.fixed(JETZT, ZoneOffset.UTC),
-          CardServiceAufbau.KEIN_FREMDES_BOARD);
+          CardServiceAufbau.KEIN_FREMDES_BOARD,
+          new Anbietersicht(cards, zuordnung, mock(PermissionChecker.class)));
 
   @Test
   void aktivitaet_reichtStatusNachDerBewegungUndStempelDurch() {

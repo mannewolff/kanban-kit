@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest'
 import {
   BUDGETFELDER,
   ERGEBNISGRUND,
+  KOEPFE,
   LAUFSTAND,
   PLAN_REVIEW,
   PROTOKOLL,
   SZENARIEN_ABSCHNITT,
   SZENARIO_SCHRITT,
+  ZEILEN,
   passe,
+  traegtKopf,
+  zeilenRest,
   type Wortform,
 } from './kitWortformen'
 
@@ -259,5 +263,54 @@ describe('kitWortformen — Abschnitt Szenarien (Issue #1627)', () => {
     expect(passe(SZENARIO_SCHRITT, '**Wenn ich klicke')).toBeNull()
     expect(passe(SZENARIO_SCHRITT, 'Text Wenn ich klicke')).toBeNull()
     expect(passe(SZENARIO_SCHRITT, '-Wenn ich klicke')).toBeNull()
+  })
+})
+
+describe('kitWortformen — Abschnitt Köpfe der Rückfragen (Issue #2217)', () => {
+  it('nennt Rückfrage und Antwort in beiden Sprachen', () => {
+    expect(KOEPFE.rueckfrage).toEqual(['## Rückfrage', '## Question'])
+    expect(KOEPFE.antwort).toEqual(['## Antwort', '## Answer'])
+  })
+
+  it('nennt den Kopf Gespräch in beiden Sprachen (Issue #2219)', () => {
+    expect(KOEPFE.gespraech).toEqual(['## Gespräch', '## Conversation'])
+  })
+
+  it('erkennt den Kopf in der ersten nichtleeren Zeile, gleich in welcher Sprache und Schreibung', () => {
+    expect(traegtKopf(KOEPFE.rueckfrage, '## Rückfrage\n\n```json kit-vorlage\n[]\n```')).toBe(true)
+    expect(traegtKopf(KOEPFE.rueckfrage, '\n  ## question  \nText')).toBe(true)
+    expect(traegtKopf(KOEPFE.antwort, '## ANTWORT')).toBe(true)
+    expect(traegtKopf(KOEPFE.antwort, '## Answer\r\nmehr')).toBe(true)
+  })
+
+  it('überspringt eine Zeile aus Leerraum vor dem Kopf (Issue #2243)', () => {
+    expect(traegtKopf(KOEPFE.antwort, '   \n## Antwort')).toBe(true)
+  })
+
+  it('verlangt den Kopf allein auf der ersten nichtleeren Zeile', () => {
+    expect(traegtKopf(KOEPFE.antwort, 'Vorweg\n## Antwort')).toBe(false)
+    expect(traegtKopf(KOEPFE.antwort, '## Antworten')).toBe(false)
+    expect(traegtKopf(KOEPFE.antwort, '### Antwort')).toBe(false)
+    expect(traegtKopf(KOEPFE.rueckfrage, '## Antwort')).toBe(false)
+    expect(traegtKopf(KOEPFE.rueckfrage, '')).toBe(false)
+    expect(traegtKopf(KOEPFE.rueckfrage, '  \n \n')).toBe(false)
+  })
+})
+
+describe('kitWortformen — Beim Anbieter und Seit (Issue #2218)', () => {
+  it('nennt Kopf und Zeile in beiden Sprachen', () => {
+    expect(KOEPFE.beimAnbieter).toEqual(['## Beim Anbieter', '## With the provider'])
+    expect(ZEILEN.seit).toEqual(['Seit:', 'Since:'])
+  })
+
+  it('liest den Rest der ersten passenden Zeile, gleich in welcher Sprache und Schreibung', () => {
+    expect(zeilenRest(ZEILEN.seit, '## Beim Anbieter\nSeit: 2026-11-22T10:00:00Z\nSeit: später')).toBe('2026-11-22T10:00:00Z')
+    expect(zeilenRest(ZEILEN.seit, '## With the provider\r\n  since:  2026-11-22T10:00:00Z \r\n')).toBe('2026-11-22T10:00:00Z')
+  })
+
+  it('liefert undefined ohne passende Zeile oder bei einem Anfang mitten in der Zeile', () => {
+    expect(zeilenRest(ZEILEN.seit, '## Beim Anbieter\nText')).toBeUndefined()
+    expect(zeilenRest(ZEILEN.seit, 'Kunde seit: gestern')).toBeUndefined()
+    expect(zeilenRest(ZEILEN.seit, '')).toBeUndefined()
   })
 })

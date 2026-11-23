@@ -47,8 +47,12 @@
     },
     {
       "name": "bausteine-board",
-      "muster": ["src/components/board/**/*.tsx"],
-      "testMuster": ["src/components/BoardView.test.tsx", "src/components/board/KartenHerkunft.test.tsx"],
+      "muster": ["src/components/board/**/*.tsx", "src/components/anbieter/AnbieterHinweis.tsx"],
+      "testMuster": [
+        "src/components/BoardView.test.tsx",
+        "src/components/board/KartenHerkunft.test.tsx",
+        "src/components/anbieter/AnbieterHinweis.test.tsx"
+      ],
       "aufgenommen": false,
       "phase": 1,
       "reihenfolge": 5,
@@ -100,7 +104,9 @@
         "src/components/LabelErklaerung.tsx",
         "src/components/Erklaerung.tsx",
         "src/components/ErklaerungInfo.tsx",
-        "src/components/Entscheidungskette.tsx"
+        "src/components/Entscheidungskette.tsx",
+        "src/components/anbieter/RueckfrageKarte.tsx",
+        "src/components/anbieter/GespraechVerlauf.tsx"
       ],
       "testMuster": [
         "src/components/CardDetailModal.test.tsx",
@@ -115,7 +121,9 @@
         "src/components/LabelErklaerung.test.tsx",
         "src/components/Erklaerung.test.tsx",
         "src/components/ErklaerungInfo.test.tsx",
-        "src/components/Entscheidungskette.test.tsx"
+        "src/components/Entscheidungskette.test.tsx",
+        "src/components/anbieter/RueckfrageKarte.test.tsx",
+        "src/components/anbieter/GespraechVerlauf.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 2,
@@ -224,7 +232,9 @@
         "src/pages/BoardListPage.tsx",
         "src/pages/BoardPage.tsx",
         "src/pages/EpicsPage.tsx",
-        "src/pages/KartenLinkPage.tsx"
+        "src/pages/KartenLinkPage.tsx",
+        "src/components/anbieter/WartetAufDich.tsx",
+        "src/components/anbieter/IdeeEinstellenDialog.tsx"
       ],
       "testMuster": [
         "src/pages/ProjectsPage.test.tsx",
@@ -233,7 +243,9 @@
         "src/pages/BoardListPage.test.tsx",
         "src/pages/BoardPage.test.tsx",
         "src/pages/EpicsPage.test.tsx",
-        "src/pages/KartenLinkPage.test.tsx"
+        "src/pages/KartenLinkPage.test.tsx",
+        "src/components/anbieter/WartetAufDich.test.tsx",
+        "src/components/anbieter/IdeeEinstellenDialog.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 3,

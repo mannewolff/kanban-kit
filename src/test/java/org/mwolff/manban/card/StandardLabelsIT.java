@@ -29,7 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class StandardLabelsIT extends AbstractIntegrationTest {
 
-  private static final int SATZ = 25;
+  private static final int SATZ = 27;
   private static final String ADMIN = "standardlabels-admin@example.com";
   private static final String OWNER = "standardlabels-owner@example.com";
 
@@ -56,7 +56,7 @@ class StandardLabelsIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$[12].gruppe").value("Kit"))
         .andExpect(jsonPath("$[13].name").value("kit:manual"))
         .andExpect(jsonPath("$[13].gruppe").value("Kit"))
-        .andExpect(jsonPath("$[24].name").value("planreview:2"));
+        .andExpect(jsonPath("$[26].name").value("planreview:2"));
   }
 
   @Test

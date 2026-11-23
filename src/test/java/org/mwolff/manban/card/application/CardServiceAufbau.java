@@ -209,7 +209,14 @@ final class CardServiceAufbau {
             mock(CardBestandRepository.class),
             quelle);
     return new CardIngestService(
-        cards, b.abhaengigkeiten(), boardService, permissions, b.grundlage(), b.sicht(), clock);
+        cards,
+        b.abhaengigkeiten(),
+        boardService,
+        permissions,
+        b.grundlage(),
+        b.sicht(),
+        clock,
+        b.anbieter());
   }
 
   static EpicService epicAusPorts(
@@ -273,7 +280,8 @@ final class CardServiceAufbau {
         b.grundlage(),
         b.sicht(),
         new VorhabenMassenzuordnung(cards, b.grundlage(), permissions),
-        clock);
+        clock,
+        b.anbieter());
   }
 
   static CardArchiveService archiveAusPorts(
@@ -341,7 +349,8 @@ final class CardServiceAufbau {
         b.sicht(),
         new VorhabenArchivierung(cards, quelle),
         events,
-        clock);
+        clock,
+        b.anbieter());
   }
 
   static CardMoveService moveAusPorts(
@@ -422,6 +431,7 @@ final class CardServiceAufbau {
       CardBestandRepository bestand,
       BoardQuelle quelle) {
     KartenAbhaengigkeiten abhaengigkeiten = new KartenAbhaengigkeiten(dependencies, cards);
+    Anbietersicht anbieter = new Anbietersicht(cards, zuordnung, permissions);
     KartenGrundlage grundlage =
         new KartenGrundlage(
             cards,
@@ -434,12 +444,17 @@ final class CardServiceAufbau {
             actor,
             events,
             clock,
-            quelle);
-    KartenSicht sicht = new KartenSicht(cards, bestand, abhaengigkeiten, zuordnung, permissions);
-    return new Bausteine(abhaengigkeiten, grundlage, sicht);
+            quelle,
+            anbieter);
+    KartenSicht sicht =
+        new KartenSicht(cards, bestand, abhaengigkeiten, zuordnung, permissions, anbieter);
+    return new Bausteine(abhaengigkeiten, grundlage, sicht, anbieter);
   }
 
   /** Die modulinternen Bausteine, die alle Prüflinge aus denselben Ports bekommen. */
   private record Bausteine(
-      KartenAbhaengigkeiten abhaengigkeiten, KartenGrundlage grundlage, KartenSicht sicht) {}
+      KartenAbhaengigkeiten abhaengigkeiten,
+      KartenGrundlage grundlage,
+      KartenSicht sicht,
+      Anbietersicht anbieter) {}
 }

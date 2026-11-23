@@ -33,6 +33,13 @@ public enum Permission {
   TICKET_UPDATE,
   TICKET_DELETE,
 
+  /**
+   * Störungen beim Anbieter sehen — Reparaturkarten und Kartenprüfungen, deren Ergebnis nicht grün
+   * ist (Plan #2206, E2). Eigene Ressource {@code REPAIR}, weil {@code RoleMatrixService} die
+   * Ressource am ersten Unterstrich abliest. Alle Rollen außer {@link ProjectRole#CUSTOMER}.
+   */
+  REPAIR_READ,
+
   CARD_MOVE,
   /**
    * Karte in ein <b>anderes Projekt</b> verschieben (Issue #1165). Durchgesetzt wird das weiterhin

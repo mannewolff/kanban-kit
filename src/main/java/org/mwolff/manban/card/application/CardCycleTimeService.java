@@ -48,29 +48,34 @@ public class CardCycleTimeService {
   private final BoardService boardService;
   private final PermissionChecker permissions;
   private final Clock clock;
+  private final Anbietersicht anbieter;
 
   public CardCycleTimeService(
       CardRepository cards,
       CardColumnTransitionRepository transitions,
       BoardService boardService,
       PermissionChecker permissions,
-      Clock clock) {
+      Clock clock,
+      Anbietersicht anbieter) {
     this.cards = cards;
     this.transitions = transitions;
     this.boardService = boardService;
     this.permissions = permissions;
     this.clock = clock;
+    this.anbieter = anbieter;
   }
 
   /**
    * Dashboard-Kennzahlen eines Boards. Erfordert Board-Leserecht (Mitglied und aufwärts, wie die
-   * Board-Ansicht).
+   * Board-Ansicht). Karten, die der Aufrufer nicht sieht, zählen nicht mit und erscheinen nicht als
+   * Ausreißer (Issue #2211).
    */
   @Transactional(readOnly = true)
   public BoardDashboardKpis dashboard(long userId, long boardId) {
-    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.requireMembership(userId, projectId);
 
-    List<Card> workCards = workCards(boardId);
+    List<Card> workCards = anbieter.sichtbare(userId, projectId, workCards(boardId));
     List<CardColumnTransition> trans = transitions.findByBoardId(boardId);
     List<ColumnView> boardColumns = boardService.listColumns(boardId);
     Instant now = clock.instant();
@@ -106,11 +111,14 @@ public class CardCycleTimeService {
   @Transactional(readOnly = true)
   public ImplementationTimeView implementationTime(
       long userId, long boardId, @Nullable Instant from, @Nullable Instant to) {
-    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.requireMembership(userId, projectId);
     @Nullable Period period = period(from, to);
 
     List<MeasuredCard> measured =
-        implementationTimes(workCards(boardId), byCard(transitions.findByBoardId(boardId)));
+        implementationTimes(
+            anbieter.sichtbare(userId, projectId, workCards(boardId)),
+            byCard(transitions.findByBoardId(boardId)));
     long[] inPeriod =
         seconds(
             measured.stream().filter(m -> period == null || period.contains(m.doneAt())).toList());

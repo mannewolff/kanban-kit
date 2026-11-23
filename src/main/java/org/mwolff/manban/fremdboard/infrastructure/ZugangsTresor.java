@@ -126,7 +126,7 @@ public final class ZugangsTresor implements ZugangsSchutz {
     try {
       entschluesseln(gespeichert);
       return true;
-    } catch (ZugangNichtLesbarException e) {
+    } catch (ZugangNichtLesbarException _) {
       return false;
     }
   }

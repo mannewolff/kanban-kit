@@ -189,6 +189,25 @@ class GitLabAbrufTest {
   }
 
   @Test
+  void unbekannterEintragOhneRumpf_istLeer() throws Exception {
+    // Given: ein 404 ohne Rumpf — es gibt nichts zu lesen und nichts zu schließen.
+    try (HttpClient client = mock(HttpClient.class)) {
+      HttpResponse<?> antwort = mock(HttpResponse.class);
+      when(antwort.statusCode()).thenReturn(404);
+      doReturn(null).when(antwort).body();
+      doReturn(antwort).when(client).send(any(HttpRequest.class), any());
+      GitLabAbruf abruf =
+          new GitLabAbruf(
+              new HostErlaubnis(List.of("localhost"), client, Duration.ofSeconds(1)),
+              new ZugangsTresor(GitLabTestServer.SCHLUESSEL, new SecureRandom()),
+              GitLabAbruf.Grenzen.VORGABE);
+
+      // When / Then
+      assertThat(abruf.eintrag(gitlab.verbindung(), "/issues/7")).isEmpty();
+    }
+  }
+
+  @Test
   void vorgabe_haeltDieSeitenzahlDerListeAus() {
     // Then: 1000 volle Seiten zu je 100 Einträgen bleiben möglich.
     assertThat(GitLabAbruf.Grenzen.VORGABE.eintraege())

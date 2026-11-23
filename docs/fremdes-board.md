@@ -106,6 +106,15 @@ Unter **Administration → Board-Quelle** (nur für Owner sichtbar):
 Danach zeigt die Einstellung, seit wann das Board angebunden ist, wann der letzte Abgleich lief und ob
 er gescheitert ist.
 
+## Board-Ansicht für Mitglieder
+
+Jedes Mitglied des Projekts, gleich in welcher Rolle, erfährt in der Board-Ansicht, dass das Board in
+GitLab liegt, von wann der gezeigte Stand ist und ob der letzte Abgleich gescheitert ist. Ist nach dem
+Anbinden noch kein Abgleich gelungen, steht dort, dass noch kein Stand aus GitLab vorliegt. Das Konto
+des Kits und den Fehlertext eines gescheiterten Abgleichs sehen nur der Owner und die Plattform-Admins
+in *Administration → Board-Quelle*; den Zugang zeigt kanban-kit niemandem. Wer nicht Mitglied des
+Projekts ist, erfährt nichts davon.
+
 ## Statuslabels
 
 Jede Karte hat einen von fünf Status: Backlog, Ready, In progress, In review, Done. In GitLab trägt

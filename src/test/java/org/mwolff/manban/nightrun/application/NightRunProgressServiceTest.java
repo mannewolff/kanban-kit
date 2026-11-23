@@ -3,7 +3,9 @@ package org.mwolff.manban.nightrun.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -24,6 +26,8 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mwolff.manban.card.application.Anbietersicht;
+import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.card.application.CardRunQueryService.LaufKarteView;
 import org.mwolff.manban.card.application.CardRunQueryService.TokenActivityView;
@@ -76,6 +80,7 @@ class NightRunProgressServiceTest {
   private PermissionChecker permissions;
   private CardRunQueryService cards;
   private CommentService comments;
+  private Anbietersicht anbieter;
   private NightRunProgressService service;
 
   @BeforeEach
@@ -84,6 +89,10 @@ class NightRunProgressServiceTest {
     permissions = mock(PermissionChecker.class);
     cards = mock(CardRunQueryService.class);
     comments = mock(CommentService.class);
+    anbieter = mock(Anbietersicht.class);
+    // Vorgabe: der Aufrufer sieht alles; die Fälle Kunde stellen es um (Issue #2211).
+    when(anbieter.sichtbare(anyLong(), anyLong(), anyList(), any()))
+        .thenAnswer(inv -> inv.getArgument(2));
     service =
         new NightRunProgressService(
             runs,
@@ -91,7 +100,8 @@ class NightRunProgressServiceTest {
             cards,
             comments,
             new NightRunProperties(null, null, null, null, STILLE),
-            Clock.fixed(JETZT, ZoneOffset.UTC));
+            Clock.fixed(JETZT, ZoneOffset.UTC),
+            anbieter);
   }
 
   private static NightRun lauf(
@@ -709,5 +719,32 @@ class NightRunProgressServiceTest {
                 karteMit(72L, 1422, "[Plan] Kette", List.of(), KARTEN_ID, "Plan-Review: fable")));
 
     assertThat(service.kettenstand(USER, KARTEN_ID).planReviewVorhanden()).isFalse();
+  }
+
+  // --- Kunde ohne REPAIR_READ (Issue #2211) -----------------------------
+
+  @Test
+  void kettenstandEinerVerborgenenKarte_endetWieEinerUnbekannten() {
+    karteImProjekt(karteMit(KARTEN_ID, NUMMER, "[Fachlich] Kette", List.of(), null, null));
+    doThrow(new CardNotFoundException()).when(anbieter).requireSichtbar(USER, KARTEN_ID);
+
+    assertThatThrownBy(() -> service.kettenstand(USER, KARTEN_ID))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cards, never()).cardsByIds(any());
+    verifyNoInteractions(comments, runs);
+  }
+
+  @Test
+  void kettenstandWertetNurDieSichtbarenAbgeleitetenKartenAus() {
+    karteImProjekt(karteMit(KARTEN_ID, NUMMER, "[Fachlich] Kette", List.of(), null, null));
+    when(comments.laufstaendeImProjekt(PROJECT)).thenReturn(List.of());
+    List<LaufKarteView> abgeleitete =
+        List.of(karteMit(72L, 1422, "[Plan] Kette", List.of(), KARTEN_ID, "Plan-Review: fable"));
+    when(cards.derivedCards(KARTEN_ID)).thenReturn(abgeleitete);
+    // Der Plan ist dem Aufrufer verborgen: Ohne ihn gibt es kein Plan-Review.
+    when(anbieter.sichtbare(eq(USER), eq(PROJECT), eq(abgeleitete), any())).thenReturn(List.of());
+
+    assertThat(service.kettenstand(USER, KARTEN_ID).planReviewVorhanden()).isFalse();
+    verify(anbieter).requireSichtbar(USER, KARTEN_ID);
   }
 }

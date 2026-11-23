@@ -12,6 +12,11 @@ public class AttachmentNotFoundException extends RuntimeException implements Ueb
     super("Anhang nicht gefunden");
   }
 
+  /** Ein Anhang, dessen Karte dem Aufrufer verborgen ist — dieselbe Meldung (Issue #2214). */
+  public AttachmentNotFoundException(Throwable cause) {
+    super("Anhang nicht gefunden", cause);
+  }
+
   @Override
   public String schluessel() {
     return "attachment.nicht-gefunden";

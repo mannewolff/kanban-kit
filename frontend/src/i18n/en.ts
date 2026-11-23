@@ -337,10 +337,15 @@ export const en: Woerterbuch = {
 
   ROLLEN: {
     PROJEKT_ROLLEN: 'Project roles',
+    /** Anzeigenamen von Projektrollen; fehlt ein Schlüssel, zeigt die Oberfläche den Rollenwert roh. */
+    NAME: {
+      CUSTOMER: 'Customer',
+    },
     RESSOURCE: {
       BOARD: 'Board',
       EPIC: 'Epics',
       TICKET: 'Ticket',
+      REPAIR: 'Disruption',
       COMMENT: 'Comment',
       ATTACHMENT: 'Attachment',
       CARD: 'Card',
@@ -450,6 +455,11 @@ export const en: Woerterbuch = {
     MARKDOWN_WAEHLEN: 'Choose Markdown file',
     NEU_ANLEGEN: 'Create new',
     WAAGERECHT_ROLLEN: 'More columns: scroll horizontally',
+    FREMD_HINWEIS: 'This board lives in GitLab and is edited there.',
+    FREMD_STAND: (zeit: string) => `As of ${zeit}`,
+    FREMD_STAND_ALT: (zeit: string) => `GitLab is currently unreachable. Showing the state as of ${zeit}.`,
+    FREMD_NOCH_KEIN_STAND: 'No state from GitLab yet.',
+    FREMD_NICHT_ERREICHBAR_OHNE_STAND: 'GitLab is currently unreachable. No state from GitLab yet.',
     SPALTE: 'Column',
     NEUE_SPALTE: 'New column',
     SPALTE_BEARBEITEN: 'Edit column',
@@ -666,6 +676,7 @@ export const en: Woerterbuch = {
     VORSCHAU_FEHLER: 'The preview could not be loaded.',
     ABNAHME: 'Click through acceptance',
     BEARBEITEN: 'Edit',
+    IN_GITLAB_OEFFNEN: 'Open in GitLab',
     FORTSCHRITT: 'Progress',
     NICHT_GEFUNDEN: (nummer) => `Card #${nummer} not found — deleted or no access.`,
   },
@@ -2164,6 +2175,16 @@ export const en: Woerterbuch = {
         setzt: 'Only a human; the kit never sets it.',
         verschwindet: 'Only when a human removes it; afterwards the scheduler picks the card up again.',
       },
+      ANBIETER: {
+        bedeutung: 'The card is being worked on at the provider: the AI works on it in the data center.',
+        setzt: "The provider's data center when it takes over the card.",
+        verschwindet: 'As soon as the data center has finished working on the card.',
+      },
+      FREIGABE: {
+        bedeutung: 'An approval is pending on the card: an authorized person is to approve a state for release.',
+        setzt: "The provider's data center when it asks for the approval.",
+        verschwindet: 'As soon as the approval is given; the data center removes it.',
+      },
       LAUF_ABGEBROCHEN: {
         bedeutung:
           'A night runner’s run was aborted on this card; the comment “Run status” shows the state. Repeating is enough.',
@@ -2240,6 +2261,71 @@ export const en: Woerterbuch = {
       NUR_MENSCH_NIMMT_AB: 'Removing it is only possible when signed in to the Control Room, not via a token.',
       NUR_MENSCH: 'Setting and removing it are only possible when signed in to the Control Room, not via a token.',
     },
+  },
+
+  RUECKFRAGE: {
+    TITEL: 'Question from the AI',
+    EMPFEHLUNG: (text: string) => `Recommendation: ${text}`,
+    BEGRUENDUNG: (text: string) => `Reason: ${text}`,
+    MOEGLICHKEITEN: (frage: string) => `Options for: ${frage}`,
+    WEG_HINWEIS: 'Choose exactly one path.',
+    ALLES_UEBERNEHMEN: 'Accept all',
+    ANDERS_ENTSCHEIDEN: 'Decide differently',
+    EIGENE_ANTWORT: 'Your own answer',
+    ABSENDEN: 'Send',
+    ABBRECHEN: 'Cancel',
+    SPAETER: 'Later',
+    GEWAEHLT: (text: string) => `Chosen: ${text}`,
+    EMPFEHLUNG_UEBERNOMMEN: 'Recommendation accepted',
+    EIGENE: (text: string) => `Own answer: ${text}`,
+    ZURUECKGESTELLT: 'Postponed – the question stays open until this one is answered as well.',
+    UEBERMITTELT: 'Answer sent, the AI is working on it',
+    FEHLER: (meldung: string) => `The answer could not be sent: ${meldung}`,
+    VORSCHAU_ANSEHEN: 'View preview',
+    FREIGEBEN: 'Approve publishing',
+    FREIGABE_ERTEILT: 'Approval given, being published',
+    NEUERE_VORSCHAU: 'Newer preview available',
+    VEROEFFENTLICHT_UNTER: 'Published at',
+  },
+
+  GESPRAECH: {
+    TITEL: 'Conversation with the AI',
+    KI: 'AI',
+    BEGINNEN: 'Start conversation',
+    BEITRAG: 'Your message',
+    SENDEN: 'Send',
+    ANTWORTET_GLEICH: 'The AI will answer shortly …',
+    FEHLER: (meldung) => `The message could not be sent: ${meldung}`,
+  },
+
+  ANBIETER: {
+    ABSCHNITT: 'Status with the provider',
+    WARTET_AUF_DICH: 'Waiting for you',
+    GRUND_RUECKFRAGE: 'Open question',
+    GRUND_FREIGABE: 'Approval pending',
+    VORSCHAU_ANSEHEN: 'View preview',
+    VEROEFFENTLICHT_UNTER: 'Published at',
+    NICHT_ERREICHBAR: 'Currently unreachable',
+    MARKE_WARTET: 'waiting for you',
+    IN_ARBEIT: 'in progress with the provider',
+    IN_ARBEIT_SEIT: (zeit) => `in progress with the provider since ${zeit}`,
+  },
+
+  IDEE_EINSTELLEN: {
+    KNOPF: 'Submit an idea',
+    TITEL: 'Submit an idea',
+    TEXT: 'Your idea',
+    HINWEIS: 'The idea becomes a card in the idea column of the board.',
+    ZU_LANG: (laenge, grenze) => `${laenge} of at most ${grenze} characters`,
+    BOARD: 'Board',
+    DATEIEN: 'Attach files',
+    DATEI_ENTFERNEN_ARIA: (name) => `Remove ${name}`,
+    EINSTELLEN: 'Submit',
+    OHNE_SPALTE: 'The board has no column the idea could go into.',
+    ANLEGEN_FEHLER: 'The idea could not be created.',
+    DATEIEN_FEHLER: (namen) =>
+      `The idea has been created, but these files could not be attached: ${namen}. Attach them to the card again.`,
+    EINGESTELLT: 'Idea submitted.',
   },
 
   API_UEBERSICHT: {

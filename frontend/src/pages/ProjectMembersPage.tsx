@@ -27,7 +27,7 @@ import { useSnackbar } from '../components/SnackbarProvider'
 import { VorschauGesperrt } from '../components/VorschauGesperrt'
 import { useT } from '../i18n/SpracheContext'
 
-const ROLES: ProjectRole[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']
+const ROLES: ProjectRole[] = ['OWNER', 'ADMIN', 'MEMBER', 'CUSTOMER', 'VIEWER']
 
 /**
  * Stift zum Namen: außerhalb der Vorschau mit seinem Tooltip, in der „Ansicht als XY“ gesperrt mit dem
@@ -96,6 +96,8 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
   // Ein Projekt-ADMIN bekommt OWNER nicht angeboten und ändert die Rolle eines OWNERs nicht.
   const canGrantOwner = canTransferOwnership(role, isPlatformAdmin(user))
   const roles = canGrantOwner ? ROLES : ROLES.filter((r) => r !== 'OWNER')
+  const rollenNamen: Readonly<Record<string, string>> = t.ROLLEN.NAME
+  const rollenName = (r: string) => rollenNamen[r] ?? r
   const { editMode } = useEditMode()
   const isOwner = role === 'OWNER'
   const ownerCount = members.filter((m) => m.role === 'OWNER').length
@@ -255,13 +257,13 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
         >
           {roles.map((r) => (
             <MenuItem key={r} value={r}>
-              {r}
+              {rollenName(r)}
             </MenuItem>
           ))}
         </TextField>
       </VorschauGesperrt>
     ) : (
-      member.role
+      rollenName(member.role)
     )
 
   const actionsCell = (member: Member) => (
@@ -324,7 +326,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
             <TextField size="small" select label={t.ALLGEMEIN.ROLLE} value={inviteRole} sx={{ minWidth: 120 }}
               onChange={(e) => setInviteRole(e.target.value as ProjectRole)}
               slotProps={{ htmlInput: { 'aria-label': t.MITGLIEDER.EINLADUNGSROLLE } }}>
-              {roles.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+              {roles.map((r) => <MenuItem key={r} value={r}>{rollenName(r)}</MenuItem>)}
             </TextField>
             <VorschauGesperrt>
               <Button type="submit" variant="contained" disabled={inviting || !inviteEmail.trim()}>

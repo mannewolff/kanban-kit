@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -24,6 +25,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.BoardView;
 import org.mwolff.manban.card.application.FremdKartenBestand;
@@ -35,14 +37,19 @@ import org.mwolff.manban.fremdboard.domain.StatusLabels;
 import org.mwolff.manban.fremdboard.domain.Verbindung;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
+import org.mwolff.manban.project.application.ProjectNotFoundException;
 
 /**
  * Einrichten, Prüfen und Ändern der Verbindung zu einem fremden Board (Issue #2166, Plan #2152 A2,
  * A5, A13, A14, A18).
  */
+// PMD.TooManyMethods: Je Regel des Dienstes ein Test — Einrichten, Ändern, Prüfen und seit Issue
+// #2223 die knappe Auskunft für Mitglieder; zusammengelegt nennte ein Fehlschlag seine Regel nicht.
+@SuppressWarnings("PMD.TooManyMethods")
 class VerbindungServiceTest {
 
   private static final long OWNER = 3L;
+  private static final long MITGLIED = 4L;
   private static final long PROJEKT = 7L;
   private static final long BOARD_ID = 11L;
   private static final Instant JETZT = Instant.parse("2026-11-15T10:00:00Z");
@@ -287,6 +294,44 @@ class VerbindungServiceTest {
     assertThatThrownBy(() -> service.lesen(OWNER, PROJEKT))
         .isInstanceOf(ProjectAccessDeniedException.class);
     verify(verbindungen, never()).finde(anyLong());
+  }
+
+  @Test
+  void standPrueftDieMitgliedschaftVorDemLesen() {
+    FremdBoardStand gelesen =
+        new FremdBoardStand(
+            true, FremdBoardArt.GITLAB, Instant.parse("2026-11-23T09:58:00Z"), true);
+    when(verbindungen.stand(PROJEKT)).thenReturn(Optional.of(gelesen));
+
+    FremdBoardStand stand = service.stand(MITGLIED, PROJEKT);
+
+    assertThat(stand).isEqualTo(gelesen);
+    InOrder reihenfolge = inOrder(permissions, verbindungen);
+    reihenfolge.verify(permissions).requireMembership(MITGLIED, PROJEKT);
+    reihenfolge.verify(verbindungen).stand(PROJEKT);
+    verify(permissions, never()).requireOwner(anyLong(), anyLong());
+  }
+
+  @Test
+  void einNichtmitgliedLiestKeinenStand() {
+    doThrow(new ProjectNotFoundException()).when(permissions).requireMembership(MITGLIED, PROJEKT);
+
+    assertThatThrownBy(() -> service.stand(MITGLIED, PROJEKT))
+        .isInstanceOf(ProjectNotFoundException.class);
+    verify(verbindungen, never()).stand(anyLong());
+  }
+
+  @Test
+  void einProjektOhneVerbindungLiefertDenLeerenStand() {
+    when(verbindungen.stand(PROJEKT)).thenReturn(Optional.empty());
+
+    FremdBoardStand stand = service.stand(MITGLIED, PROJEKT);
+
+    assertThat(stand).isEqualTo(FremdBoardStand.ohne());
+    assertThat(stand.imFremdsystem()).isFalse();
+    assertThat(stand.art()).isNull();
+    assertThat(stand.standAm()).isNull();
+    assertThat(stand.abgleichGescheitert()).isFalse();
   }
 
   @Test

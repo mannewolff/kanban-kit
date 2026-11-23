@@ -1,4 +1,4 @@
-export type ProjectRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER'
+export type ProjectRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'CUSTOMER' | 'VIEWER'
 
 /**
  * Ein Plattform-Admin ist Super-User (Vollzugriff auf alle Projekte, Backend erzwungen).
@@ -31,6 +31,13 @@ export const canEditCards = (role: string, platformAdmin = false): boolean =>
 /** Wer Kommentare moderieren (löschen) darf (COMMENT_DELETE) — ADMIN/OWNER oder Plattform-Admin. */
 export const canModerateComments = (role: string, platformAdmin = false): boolean =>
   platformAdmin || role === 'OWNER' || role === 'ADMIN'
+
+/**
+ * Wer Störungen (Reparaturkarten, nicht grüne Prüfmeldungen) sehen darf (REPAIR_READ) — jede Rolle
+ * außer CUSTOMER, der Plattform-Admin immer (Issue #2213, Plan #2206 E2).
+ */
+export const darfStoerungenSehen = (role: string, platformAdmin = false): boolean =>
+  platformAdmin || role !== 'CUSTOMER'
 
 /** Ob der eingeloggte Nutzer plattformweit Admin ist. */
 export const isPlatformAdmin = (user: { platformRole?: string } | null | undefined): boolean =>

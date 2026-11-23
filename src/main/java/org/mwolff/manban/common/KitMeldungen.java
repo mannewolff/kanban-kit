@@ -13,7 +13,8 @@ import org.jspecify.annotations.Nullable;
  * MELDUNG_WERTE} aus {@code kit/board/namen.mjs}, Kit 6.1.3. Geführt wird, was die
  * Entscheidungskette liest, je Eintrag deutsch, englisch und frühere Wortlaute. Gelesen werden
  * immer alle Namen: Ein Projekt kann die Sprache wechseln, und alte Meldungen bleiben stehen
- * (Kriterium 16).
+ * (Kriterium 16). Die Köpfe der Rückfragen und Gespräche zwischen Kunde und KI kommen aus Plan
+ * #2206 (Issue #2208).
  *
  * <p>Frameworkfrei und ohne Modulabhängigkeit wie {@link KitNamen}.
  */
@@ -51,7 +52,16 @@ public final class KitMeldungen {
     AUSGEFUEHRT_VON("Ausgeführt von:", "Executed by:"),
     VERSION("Version:"),
     GEKLAERTER_STAND("## Geklärter Stand", "## Clarified state"),
-    ERGEBNIS("Ergebnis:", "Result:");
+    ERGEBNIS("Ergebnis:", "Result:"),
+    // Köpfe und Zeilen der Rückfragen, Antworten und Gespräche (Issue #2208, Plan #2206 E9).
+    RUECKFRAGE("## Rückfrage", "## Question"),
+    ANTWORT("## Antwort", "## Answer"),
+    GESPRAECH("## Gespräch", "## Conversation"),
+    KARTENPRUEFUNG("## Kartenprüfung", "## Card check"),
+    BEIM_ANBIETER("## Beim Anbieter", "## With the provider"),
+    SEIT("Seit:", "Since:"),
+    VORSCHAU("Vorschau:", "Preview:"),
+    VON("Von:", "From:");
 
     // List.of ist unveränderlich; das Prüfprogramm erkennt das am Typ List nicht.
     @SuppressWarnings("ImmutableEnumChecker")

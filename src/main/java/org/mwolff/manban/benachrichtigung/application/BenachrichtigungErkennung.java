@@ -49,6 +49,11 @@ import org.springframework.transaction.annotation.Transactional;
  * meldet ein Paket desselben Laufs die Karte, bleibt es still. Die Laufkennung ist eine
  * Selbstauskunft des Clients; nicht jede Karte eines Laufs hat ein Paket. Eine Mail zu viel ist
  * besser als keine.
+ *
+ * <p><b>Störungen bleiben beim Anbieter</b> (Issue #2214, Plan #2206 E16). Ein Kartenereignis an
+ * einer Reparaturkarte — einer Karte mit einem Label der Sache {@link Sache#REPARATUR} — erreicht
+ * nur, wer zusätzlich das Recht {@link Permission#REPAIR_READ} hat; ein Kunde bekommt keine Mail
+ * dazu.
  */
 // PMD.CouplingBetweenObjects: Die Erkennung ist die eine Stelle, die Läufe, Label-Ereignisse,
 // Schalter und Rechte zusammenführt; aufgeteilt läge die Regel für Zustellungen an zwei Orten.
@@ -64,6 +69,9 @@ public class BenachrichtigungErkennung {
           .filter(sache -> AnlassArt.ausSache(sache).isPresent())
           .flatMap(sache -> KitNamen.STANDARD.namen(sache).stream())
           .toList();
+
+  /** Die Namen der Sache Reparatur, deutsch und englisch. */
+  private static final List<String> REPARATUR = KitNamen.STANDARD.namen(Sache.REPARATUR);
 
   private final BenachrichtigbareLaeufe laeufe;
   private final AnlassRepository anlaesse;
@@ -135,6 +143,7 @@ public class BenachrichtigungErkennung {
       return 0;
     }
     long projectId = karte.projectId();
+    boolean reparatur = karte.labels().stream().anyMatch(REPARATUR::contains);
     Instant eintritt = ereignis.createdAt();
     Optional<Long> anlass =
         anlaesse.legeAnlassZumLabelAn(
@@ -146,7 +155,11 @@ public class BenachrichtigungErkennung {
                 projectId,
                 eintritt,
                 jetzt,
-                userId -> permissions.hasPermission(userId, projectId, Permission.TICKET_READ)));
+                userId ->
+                    permissions.hasPermission(userId, projectId, Permission.TICKET_READ)
+                        && (!reparatur
+                            || permissions.hasPermission(
+                                userId, projectId, Permission.REPAIR_READ))));
     return anlass.isPresent() ? 1 : 0;
   }
 

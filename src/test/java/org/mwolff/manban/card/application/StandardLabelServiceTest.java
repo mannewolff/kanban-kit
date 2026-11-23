@@ -27,7 +27,7 @@ class StandardLabelServiceTest {
 
   private static final long ADMIN = 1L;
   private static final long NUTZER = 2L;
-  private static final int SATZ = 25;
+  private static final int SATZ = 27;
 
   private LabelRepository labels;
   private BoardService boardService;
@@ -84,6 +84,8 @@ class StandardLabelServiceTest {
             "kit:repair",
             "kit:hotfix",
             "kit:manual",
+            "kit:provider",
+            "kit:approval",
             "run:aborted",
             "run:running",
             "run:waiting",
@@ -101,9 +103,11 @@ class StandardLabelServiceTest {
     assertThat(satz.get(11)).isEqualTo(new StandardLabel("kit:repair", "Kit", "#6a1b9a"));
     assertThat(satz.get(12)).isEqualTo(new StandardLabel("kit:hotfix", "Kit", "#6a1b9a"));
     assertThat(satz.get(13)).isEqualTo(new StandardLabel("kit:manual", "Kit", "#6a1b9a"));
-    assertThat(satz.get(14)).isEqualTo(new StandardLabel("run:aborted", "Lauf", "#1565c0"));
-    assertThat(satz.get(18)).isEqualTo(new StandardLabel("review:done", "Review", "#2e7d32"));
-    assertThat(satz.get(24))
+    assertThat(satz.get(14)).isEqualTo(new StandardLabel("kit:provider", "Kit", "#6a1b9a"));
+    assertThat(satz.get(15)).isEqualTo(new StandardLabel("kit:approval", "Kit", "#6a1b9a"));
+    assertThat(satz.get(16)).isEqualTo(new StandardLabel("run:aborted", "Lauf", "#1565c0"));
+    assertThat(satz.get(20)).isEqualTo(new StandardLabel("review:done", "Review", "#2e7d32"));
+    assertThat(satz.get(26))
         .isEqualTo(new StandardLabel("planreview:2", "Stufenleiste", "#ef6c00"));
   }
 

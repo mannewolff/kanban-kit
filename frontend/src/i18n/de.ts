@@ -361,10 +361,15 @@ export const de = {
    */
   ROLLEN: {
     PROJEKT_ROLLEN: 'Projekt-Rollen',
+    /** Anzeigenamen von Projektrollen; fehlt ein Schlüssel, zeigt die Oberfläche den Rollenwert roh. */
+    NAME: {
+      CUSTOMER: 'Kunde',
+    },
     RESSOURCE: {
       BOARD: 'Board',
       EPIC: 'Vorhaben',
       TICKET: 'Ticket',
+      REPAIR: 'Störung',
       COMMENT: 'Kommentar',
       ATTACHMENT: 'Anhang',
       CARD: 'Karte',
@@ -481,6 +486,12 @@ export const de = {
     MARKDOWN_WAEHLEN: 'Markdown-Datei auswählen',
     NEU_ANLEGEN: 'Neu anlegen',
     WAAGERECHT_ROLLEN: 'Weitere Spalten: waagerecht rollen',
+    /** Hinweis über den Spalten eines Boards in GitLab (Issue #2170, Plan #2152 A9). */
+    FREMD_HINWEIS: 'Dieses Board liegt in GitLab und wird dort bearbeitet.',
+    FREMD_STAND: (zeit: string) => `Stand: ${zeit}`,
+    FREMD_STAND_ALT: (zeit: string) => `GitLab ist gerade nicht erreichbar. Stand von ${zeit}.`,
+    FREMD_NOCH_KEIN_STAND: 'Noch kein Stand aus GitLab.',
+    FREMD_NICHT_ERREICHBAR_OHNE_STAND: 'GitLab ist gerade nicht erreichbar. Noch kein Stand aus GitLab.',
     SPALTE: 'Spalte',
     NEUE_SPALTE: 'Neue Spalte',
     SPALTE_BEARBEITEN: 'Spalte bearbeiten',
@@ -711,6 +722,8 @@ export const de = {
     VORSCHAU_FEHLER: 'Vorschau konnte nicht geladen werden.',
     ABNAHME: 'Abnahme durchklicken',
     BEARBEITEN: 'Bearbeiten',
+    /** Verweis einer Karte aus GitLab auf ihr Original (Issue #2170, Plan #2152 A10). */
+    IN_GITLAB_OEFFNEN: 'In GitLab öffnen',
     FORTSCHRITT: 'Fortschritt',
     NICHT_GEFUNDEN: (nummer: number) => `Karte #${nummer} nicht gefunden — gelöscht oder kein Zugriff.`,
   },
@@ -2302,6 +2315,16 @@ export const de = {
         setzt: 'Nur ein Mensch; das Kit setzt es nie.',
         verschwindet: 'Nur, wenn ein Mensch es abnimmt; danach nimmt der Taktgeber die Karte wieder auf.',
       },
+      ANBIETER: {
+        bedeutung: 'Die Karte steht beim Anbieter in Arbeit: Die KI arbeitet im Rechenzentrum an ihr.',
+        setzt: 'Das Rechenzentrum des Anbieters, wenn es die Karte übernimmt.',
+        verschwindet: 'Sobald das Rechenzentrum die Arbeit an der Karte beendet hat.',
+      },
+      FREIGABE: {
+        bedeutung: 'An der Karte wartet eine Freigabe: Ein berechtigter Mensch soll einen Stand zum Veröffentlichen freigeben.',
+        setzt: 'Das Rechenzentrum des Anbieters, wenn es um die Freigabe bittet.',
+        verschwindet: 'Sobald die Freigabe gegeben ist; das Rechenzentrum nimmt es ab.',
+      },
       LAUF_ABGEBROCHEN: {
         bedeutung:
           'Ein Lauf des Nacht-Runners ist an dieser Karte abgebrochen; der Kommentar „Laufstand“ nennt den Stand. Wiederholen genügt.',
@@ -2378,6 +2401,75 @@ export const de = {
       NUR_MENSCH_NIMMT_AB: 'Abnehmen geht nur angemeldet im Leitstand, nicht über ein Token.',
       NUR_MENSCH: 'Setzen und Abnehmen gehen nur angemeldet im Leitstand, nicht über ein Token.',
     },
+  },
+
+  /** Rückfragen der KI im Kartendialog, `RueckfrageKarte` (Issue #2217, Plan #2206 E8, E11). */
+  RUECKFRAGE: {
+    TITEL: 'Rückfrage der KI',
+    EMPFEHLUNG: (text: string) => `Empfehlung: ${text}`,
+    BEGRUENDUNG: (text: string) => `Begründung: ${text}`,
+    MOEGLICHKEITEN: (frage: string) => `Möglichkeiten zu: ${frage}`,
+    WEG_HINWEIS: 'Genau ein Weg ist zu wählen.',
+    ALLES_UEBERNEHMEN: 'Alles übernehmen',
+    ANDERS_ENTSCHEIDEN: 'Anders entscheiden',
+    EIGENE_ANTWORT: 'Eigene Antwort',
+    ABSENDEN: 'Absenden',
+    ABBRECHEN: 'Abbrechen',
+    SPAETER: 'Später',
+    GEWAEHLT: (text: string) => `Gewählt: ${text}`,
+    EMPFEHLUNG_UEBERNOMMEN: 'Empfehlung übernommen',
+    EIGENE: (text: string) => `Eigene Antwort: ${text}`,
+    ZURUECKGESTELLT: 'Zurückgestellt – die Rückfrage bleibt offen, bis auch diese Frage beantwortet ist.',
+    UEBERMITTELT: 'Antwort übermittelt, die KI arbeitet daran',
+    FEHLER: (meldung: string) => `Die Antwort ließ sich nicht übermitteln: ${meldung}`,
+    VORSCHAU_ANSEHEN: 'Vorschau ansehen',
+    FREIGEBEN: 'Veröffentlichen freigeben',
+    FREIGABE_ERTEILT: 'Freigabe erteilt, wird veröffentlicht',
+    NEUERE_VORSCHAU: 'Neuere Vorschau vorhanden',
+    VEROEFFENTLICHT_UNTER: 'Veröffentlicht unter',
+  },
+
+  /** Gespräch mit der KI im Kartendetail: `GespraechVerlauf` (Issue #2219, Plan #2206 E6, E9). */
+  GESPRAECH: {
+    TITEL: 'Gespräch mit der KI',
+    KI: 'KI',
+    BEGINNEN: 'Gespräch beginnen',
+    BEITRAG: 'Dein Beitrag',
+    SENDEN: 'Senden',
+    ANTWORTET_GLEICH: 'Die KI antwortet gleich …',
+    FEHLER: (meldung: string) => `Der Beitrag ließ sich nicht senden: ${meldung}`,
+  },
+
+  /** Startseite des Projekts und Board für den Kunden: `WartetAufDich`, `AnbieterHinweis` (Issue #2218, Plan #2206 E14). */
+  ANBIETER: {
+    ABSCHNITT: 'Stand beim Anbieter',
+    WARTET_AUF_DICH: 'Wartet auf dich',
+    GRUND_RUECKFRAGE: 'Rückfrage offen',
+    GRUND_FREIGABE: 'Freigabe ausstehend',
+    VORSCHAU_ANSEHEN: 'Vorschau ansehen',
+    VEROEFFENTLICHT_UNTER: 'Veröffentlicht unter',
+    NICHT_ERREICHBAR: 'Gerade nicht erreichbar',
+    MARKE_WARTET: 'wartet auf dich',
+    IN_ARBEIT: 'beim Anbieter in Arbeit',
+    IN_ARBEIT_SEIT: (zeit: string) => `beim Anbieter in Arbeit seit ${zeit}`,
+  },
+
+  /** Dialog „Idee einstellen“ auf der Startseite des Projekts: Text und Dateien in einem Schritt (Issue #2220, Plan #2206 E13). */
+  IDEE_EINSTELLEN: {
+    KNOPF: 'Idee einstellen',
+    TITEL: 'Idee einstellen',
+    TEXT: 'Deine Idee',
+    HINWEIS: 'Die Idee landet als Karte in der Ideenspalte des Boards.',
+    ZU_LANG: (laenge: number, grenze: number) => `${laenge} von höchstens ${grenze} Zeichen`,
+    BOARD: 'Board',
+    DATEIEN: 'Dateien anhängen',
+    DATEI_ENTFERNEN_ARIA: (name: string) => `${name} entfernen`,
+    EINSTELLEN: 'Einstellen',
+    OHNE_SPALTE: 'Das Board hat keine Spalte, in die die Idee fallen kann.',
+    ANLEGEN_FEHLER: 'Die Idee ließ sich nicht anlegen.',
+    DATEIEN_FEHLER: (namen: string) =>
+      `Die Idee ist angelegt, aber diese Dateien ließen sich nicht anhängen: ${namen}. Hänge sie an der Karte erneut an.`,
+    EINGESTELLT: 'Idee eingestellt.',
   },
 
   /** Seitenrahmen der API-Übersicht und Ausprobieren (Issue #1660, E2); Swagger UI und das OpenAPI-Dokument bleiben, wie sie sind. */

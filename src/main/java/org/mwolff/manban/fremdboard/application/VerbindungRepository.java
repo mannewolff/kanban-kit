@@ -18,6 +18,13 @@ public interface VerbindungRepository {
   /** Die Verbindung des Projekts; leer, wenn das Projekt kein fremdes Board hat. */
   Optional<Verbindung> finde(long projectId);
 
+  /**
+   * Die knappe Auskunft für jedes Mitglied (Issue #2223, Plan #2221 E6): Art, {@code stand_am} und
+   * ob {@code letzter_fehler} gesetzt ist — ohne den verschlüsselten Zugang zu lesen. Leer, wenn
+   * das Projekt kein fremdes Board hat.
+   */
+  Optional<FremdBoardStand> stand(long projectId);
+
   /** Ob das Projekt eine Verbindung hat. */
   boolean existiert(long projectId);
 
@@ -40,16 +47,19 @@ public interface VerbindungRepository {
 
   /**
    * Vermerkt einen gelungenen Abgleich: Der Fehler verschwindet, {@code letzter_abgleich_am} bleibt
-   * beim Anspruch.
+   * beim Anspruch, und {@code stand_am} — die Quelle des Board-Hinweises (Issue #2222, Plan #2221
+   * E4) — rückt auf {@code beansprucht} vor, fällt aber bei einem älteren Anspruch nicht zurück.
    *
+   * @param beansprucht der Zeitpunkt, den dieser Knoten beim Anspruch gesetzt hat
    * @param vollabgleichAm Zeitpunkt des Anspruchs, wenn es ein Vollabgleich war; sonst {@code null}
    */
-  void abgleichGelungen(long projectId, @Nullable Instant vollabgleichAm);
+  void abgleichGelungen(long projectId, Instant beansprucht, @Nullable Instant vollabgleichAm);
 
   /**
    * Vermerkt einen gescheiterten Abgleich (A9): Der Fehler steht an der Verbindung, und {@code
-   * letzter_abgleich_am} kehrt auf {@code bisher} zurück — der Stand ist so alt wie der letzte
-   * gelungene Abgleich. Hat inzwischen ein anderer Knoten neu beansprucht, bleibt dessen Anspruch.
+   * letzter_abgleich_am} kehrt auf {@code bisher} zurück. {@code stand_am}, die Quelle des
+   * Board-Hinweises, bleibt unverändert — der Stand ist so alt wie der letzte gelungene Abgleich.
+   * Hat inzwischen ein anderer Knoten neu beansprucht, bleibt dessen Anspruch.
    *
    * @param beansprucht der Zeitpunkt, den dieser Knoten beim Anspruch gesetzt hat
    */

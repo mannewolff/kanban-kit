@@ -12,12 +12,16 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.deployment.application.NeueMeldung.Commit;
 import org.mwolff.manban.deployment.domain.Ausgang;
+import org.mwolff.manban.deployment.domain.Auslieferungsart;
 import org.mwolff.manban.deployment.domain.Auslieferungsversuch;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
@@ -161,7 +165,32 @@ class DeploymentServiceTest {
         new NeueMeldung("run-1", Ausgang.SUCCESS, FERTIG, "rev-1", List.of(EINS, verschoben)));
   }
 
+  @Test
+  void gleicheKennungMitAndererArtIstKonflikt() {
+    pruefeKonflikt(mit(Auslieferungsart.VORSCHAU, null));
+    pruefeKonflikt(mit(Auslieferungsart.VEROEFFENTLICHUNG, null));
+  }
+
+  @Test
+  void gleicheKennungMitAndererAdresseIstKonflikt() {
+    pruefeKonflikt(mit(null, "https://vorschau.example.org/1"));
+  }
+
+  @Test
+  void doppelmeldungMitGleicherArtUndAdresseIstUnchanged() {
+    NeueMeldung vorschau = mit(Auslieferungsart.VORSCHAU, "https://vorschau.example.org/1");
+    service.melden(USER, PROJECT, TOKEN, vorschau);
+
+    assertThat(service.melden(USER, PROJECT, TOKEN, vorschau)).isEqualTo(Meldeergebnis.UNCHANGED);
+  }
+
+  private static NeueMeldung mit(@Nullable Auslieferungsart art, @Nullable String url) {
+    return new NeueMeldung(
+        "run-1", Ausgang.SUCCESS, FERTIG, "rev-1", List.of(EINS, ZWEI), art, url);
+  }
+
   private void pruefeKonflikt(NeueMeldung andere) {
+    store.eingefuegt.clear();
     service.melden(USER, PROJECT, TOKEN, meldung());
 
     assertThatThrownBy(() -> service.melden(USER, PROJECT, TOKEN, andere))
@@ -213,6 +242,37 @@ class DeploymentServiceTest {
         .isInstanceOf(ProjectAccessDeniedException.class);
   }
 
+  @Test
+  void zuletztNenntJuengsteVorschauUndVeroeffentlichungUndVerlangtDieMitgliedschaft() {
+    GemeldeterStand vorschau =
+        new GemeldeterStand("rev-v", "https://vorschau.example.org/2", FERTIG, JETZT);
+    GemeldeterStand veroeffentlicht =
+        new GemeldeterStand("rev-p", "https://example.org", FERTIG.minusSeconds(60), JETZT);
+    store.juengste.put(Auslieferungsart.VORSCHAU, vorschau);
+    store.juengste.put(Auslieferungsart.VEROEFFENTLICHUNG, veroeffentlicht);
+
+    ZuletztGemeldet zuletzt = service.zuletzt(USER, PROJECT);
+
+    assertThat(zuletzt).isEqualTo(new ZuletztGemeldet(vorschau, veroeffentlicht));
+    verify(permissions).requireMembership(USER, PROJECT);
+  }
+
+  @Test
+  void zuletztOhneMeldungIstBeidesLeer() {
+    assertThat(service.zuletzt(USER, PROJECT)).isEqualTo(new ZuletztGemeldet(null, null));
+  }
+
+  @Test
+  void zuletztPrueftDieMitgliedschaftVorDemLesen() {
+    doThrow(new ProjectNotFoundException()).when(permissions).requireMembership(USER, PROJECT);
+    store.juengste.put(
+        Auslieferungsart.VORSCHAU, new GemeldeterStand("rev-v", null, FERTIG, JETZT));
+
+    assertThatThrownBy(() -> service.zuletzt(USER, PROJECT))
+        .isInstanceOf(ProjectNotFoundException.class);
+    assertThat(store.gelesen).isZero();
+  }
+
   private record Eingefuegt(
       long projectId, String tokenName, NeueMeldung meldung, Instant eingang) {}
 
@@ -220,6 +280,15 @@ class DeploymentServiceTest {
   private static final class FakeStore implements DeploymentStore {
 
     private final List<Eingefuegt> eingefuegt = new ArrayList<>();
+    private final Map<Auslieferungsart, GemeldeterStand> juengste =
+        new EnumMap<>(Auslieferungsart.class);
+    private int gelesen;
+
+    @Override
+    public Optional<GemeldeterStand> juengster(long projectId, Auslieferungsart art) {
+      gelesen++;
+      return Optional.ofNullable(juengste.get(art));
+    }
 
     @Override
     public void fuegeEin(long projectId, String tokenName, NeueMeldung meldung, Instant eingang) {

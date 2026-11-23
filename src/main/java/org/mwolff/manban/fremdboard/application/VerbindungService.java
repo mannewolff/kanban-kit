@@ -82,6 +82,20 @@ public class VerbindungService {
   }
 
   /**
+   * Die knappe Auskunft für jedes Mitglied (Issue #2223, Plan #2221 E1, E3, E6). Die Mitgliedschaft
+   * wird vor jedem Lesen der Verbindung geprüft: Ein Nichtmitglied erfährt so nicht einmal, ob das
+   * Board in einem fremden System liegt.
+   *
+   * @throws org.mwolff.manban.project.application.ProjectNotFoundException wenn der Aufrufer weder
+   *     Mitglied noch Plattform-Admin ist (404)
+   */
+  @Transactional(readOnly = true)
+  public FremdBoardStand stand(long userId, long projectId) {
+    permissions.requireMembership(userId, projectId);
+    return verbindungen.stand(projectId).orElseGet(FremdBoardStand::ohne);
+  }
+
+  /**
    * Richtet die Verbindung ein oder ändert sie. Beim Ändern bleiben Art, Adresse und Projektpfad
    * fest; ein angegebener Zugang ersetzt den alten, Kit-Konto und Statuslabels werden übernommen.
    *

@@ -59,6 +59,8 @@ class CardSearchServiceTest {
   private BoardService boardService;
   private PermissionChecker permissions;
   private ProjectService projects;
+  private CardLabelRepository cardLabels;
+  private CardDependencyRepository dependencies;
   private CardSearchService service;
 
   private static Card card(
@@ -86,23 +88,30 @@ class CardSearchServiceTest {
     boardService = mock(BoardService.class);
     permissions = mock(PermissionChecker.class);
     projects = mock(ProjectService.class);
+    cardLabels = mock(CardLabelRepository.class);
+    dependencies = mock(CardDependencyRepository.class);
+    KartenZuordnung zuordnung =
+        new KartenZuordnung(
+            mock(CardAssigneeRepository.class),
+            mock(LabelRepository.class),
+            cardLabels,
+            permissions,
+            mock(CardLabelEventRepository.class),
+            ActorContext.ActorStamp::unknown,
+            Clock.systemUTC(),
+            mock(ZuweisungsBenachrichtigung.class));
+    Anbietersicht anbieter = new Anbietersicht(cards, zuordnung, permissions);
     KartenSicht sicht =
         new KartenSicht(
             cards,
             kartenBestand,
-            new KartenAbhaengigkeiten(mock(CardDependencyRepository.class), cards),
-            new KartenZuordnung(
-                mock(CardAssigneeRepository.class),
-                mock(LabelRepository.class),
-                mock(CardLabelRepository.class),
-                permissions,
-                mock(CardLabelEventRepository.class),
-                ActorContext.ActorStamp::unknown,
-                Clock.systemUTC(),
-                mock(ZuweisungsBenachrichtigung.class)),
-            permissions);
+            new KartenAbhaengigkeiten(dependencies, cards),
+            zuordnung,
+            permissions,
+            anbieter);
     service =
-        new CardSearchService(cards, kartenBestand, boardService, permissions, projects, sicht);
+        new CardSearchService(
+            cards, kartenBestand, boardService, permissions, projects, sicht, anbieter);
   }
 
   // --- getByNumber (#408) -----------------------------------------------
@@ -768,5 +777,86 @@ class CardSearchServiceTest {
         .isInstanceOf(CardNotFoundException.class);
     verify(cards, never()).findByProjectId(anyLong());
     verifyNoInteractions(kartenBestand);
+  }
+
+  // --- Kunde ohne REPAIR_READ (Issue #2211) -----------------------------
+
+  /** Der Aufrufer 5 ist Kunde: ohne REPAIR_READ, und #41 (Karte {@code id}) trägt kit:repair. */
+  private void reparaturkarte41(long id) {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cardLabels.kartenMitLabel(PROJECT, "kit:repair")).thenReturn(List.of(id));
+    when(cards.findByIds(List.of(id))).thenReturn(List.of(cardIn(id, PROJECT, BOARD, 20L, 41)));
+  }
+
+  @Test
+  void alsKunde_findetDieSucheNachNummerDieReparaturkarteNicht() {
+    reparaturkarte41(2L);
+    when(cards.findByProjectIdAndNumber(PROJECT, 41))
+        .thenReturn(Optional.of(bestand(2L, 41, "Reparatur", false, null, CardStatus.READY)));
+    when(projects.listAccessible(5L)).thenReturn(List.of(accessible(PROJECT, "Projekt A")));
+    when(cards.findByNumberInProjects(41, List.of(PROJECT)))
+        .thenReturn(List.of(cardIn(2L, PROJECT, BOARD, 20L, 41)));
+
+    assertThatThrownBy(() -> service.getByNumber(5L, PROJECT, 41))
+        .isInstanceOf(CardNotFoundException.class);
+    assertThatThrownBy(() -> service.findOnBoardByNumber(5L, BOARD, 41))
+        .isInstanceOf(CardNotFoundException.class);
+    assertThat(service.searchByNumber(5L, 41)).isEmpty();
+  }
+
+  @Test
+  void alsKunde_findetDieBoardSucheDieReparaturkarteNicht() {
+    reparaturkarte41(2L);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                bestand(1L, 40, "Paket", false, null, CardStatus.READY),
+                bestand(2L, 41, "Reparatur", false, null, CardStatus.READY)));
+
+    SuchSeite seite = service.searchOnBoard(5L, BOARD, anfrage(Set.of(), null, null), Map.of());
+
+    assertThat(seite.treffer()).extracting(SuchTreffer::number).containsExactly(40);
+  }
+
+  @Test
+  void alsKunde_endetDieKetteVorDerReparaturkarte() {
+    reparaturkarte41(2L);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(herkunft(1L, BOARD, 40, "Paket", null), herkunft(2L, BOARD, 41, "Rep", 1L)));
+
+    assertThat(service.lineageOnBoard(5L, BOARD, 40).nachfahren()).isEmpty();
+    assertThatThrownBy(() -> service.lineageOnBoard(5L, BOARD, 41))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void alsKunde_entfaelltDieHerkunftAufDieReparaturkarteImEinzelabruf() {
+    reparaturkarte41(9L);
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Ready", 1));
+    Card paket = onBoard(BOARD, "Paket", CardType.CARD, false, null, CardStatus.READY, 9L);
+    when(cards.findByProjectIdAndNumber(PROJECT, 42)).thenReturn(Optional.of(paket));
+    when(cards.findById(9L)).thenReturn(Optional.of(cardIn(9L, PROJECT, BOARD, 20L, 41)));
+
+    assertThat(service.findOnBoardByNumber(5L, BOARD, 42).item().derivedFrom()).isNull();
+    assertThat(service.getByNumber(5L, PROJECT, 42).derivedFrom()).isNull();
+  }
+
+  @Test
+  void alsOwner_findetDieSucheAuchDieReparaturkarte() {
+    reparaturkarte41(2L);
+    when(permissions.hasPermission(5L, PROJECT, Permission.REPAIR_READ)).thenReturn(true);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                bestand(1L, 40, "Paket", false, null, CardStatus.READY),
+                bestand(2L, 41, "Reparatur", false, null, CardStatus.READY)));
+    when(cards.findByProjectIdAndNumber(PROJECT, 41))
+        .thenReturn(Optional.of(bestand(2L, 41, "Reparatur", false, null, CardStatus.READY)));
+
+    assertThat(service.searchOnBoard(5L, BOARD, anfrage(Set.of(), null, null), Map.of()).treffer())
+        .extracting(SuchTreffer::number)
+        .containsExactly(41, 40);
+    assertThat(service.getByNumber(5L, PROJECT, 41).number()).isEqualTo(41);
   }
 }

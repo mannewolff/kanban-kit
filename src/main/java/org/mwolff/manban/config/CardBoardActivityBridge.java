@@ -2,6 +2,7 @@ package org.mwolff.manban.config;
 
 import org.mwolff.manban.board.application.BoardChangedEvent;
 import org.mwolff.manban.board.application.BoardChangedEvent.ChangeType;
+import org.mwolff.manban.card.application.Anbietersicht;
 import org.mwolff.manban.card.application.CardBoardActivityEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
@@ -23,17 +24,29 @@ import org.springframework.stereotype.Component;
 class CardBoardActivityBridge {
 
   private final ApplicationEventPublisher events;
+  private final Anbietersicht anbieter;
 
-  CardBoardActivityBridge(ApplicationEventPublisher events) {
+  CardBoardActivityBridge(ApplicationEventPublisher events, Anbietersicht anbieter) {
     this.events = events;
+    this.anbieter = anbieter;
   }
 
+  /**
+   * Übersetzt das Ereignis. Betrifft es eine Reparaturkarte, geht es ohne Karten-ID hinaus (Issue
+   * #2211, Plan #2206 E18): Der Strom schickt jedem Abonnenten des Boards dasselbe und kennt den
+   * Leser nicht; ohne ID lädt ein Client das Board neu wie bei jeder anderen Änderung und erfährt
+   * nichts über die Karte. Gefiltert wird hier, weil {@code board} {@code card} nicht aufrufen
+   * darf.
+   */
   @EventListener
   void onCardBoardActivity(CardBoardActivityEvent event) {
+    Long cardId = event.cardId();
     // Beide Enums sind namensgleich (siehe CardBoardActivityEvent.ActivityType); der Test
     // uebersetztJedenAktivitaetstyp haelt das fest.
     events.publishEvent(
         new BoardChangedEvent(
-            event.boardId(), ChangeType.valueOf(event.type().name()), event.cardId()));
+            event.boardId(),
+            ChangeType.valueOf(event.type().name()),
+            cardId == null || anbieter.istReparaturkarte(cardId) ? null : cardId));
   }
 }

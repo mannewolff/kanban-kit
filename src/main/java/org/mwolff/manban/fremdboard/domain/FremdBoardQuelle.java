@@ -18,8 +18,11 @@ public interface FremdBoardQuelle {
   /** Das fremde System, das diese Quelle liest. */
   FremdBoardArt art();
 
-  /** Die Nummern aller Karten des angebundenen Projekts, offene wie geschlossene. */
-  List<Long> nummern(Verbindung verbindung);
+  /**
+   * Die Nummern aller Karten des angebundenen Projekts, offene wie geschlossene, getrennt nach
+   * sichtbaren und vertraulichen (Issue #2200).
+   */
+  FremdNummern nummern(Verbindung verbindung);
 
   /**
    * Die Karten, die sich im fremden System nach {@code seit} geändert haben, offene wie
@@ -36,8 +39,11 @@ public interface FremdBoardQuelle {
   /** Die Wechsel an der Karte mit Zeit, Akteur und Kennung, ältester zuerst. */
   List<FremdEreignis> ereignisse(Verbindung verbindung, long nummer);
 
-  /** Die Kommentare an der Karte mit Autor, Anlage- und Änderungszeit, ältester zuerst. */
-  List<FremdNotiz> notizen(Verbindung verbindung, long nummer);
+  /**
+   * Die Kommentare an der Karte mit Autor, Anlage- und Änderungszeit, ältester zuerst, dazu die
+   * Kennungen der vertraulichen (Issue #2200).
+   */
+  FremdNotizen notizen(Verbindung verbindung, long nummer);
 
   /** Die Adresse, unter der die Karte im fremden System zu öffnen ist („In GitLab öffnen“). */
   String adresse(Verbindung verbindung, long nummer);

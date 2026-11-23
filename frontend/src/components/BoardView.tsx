@@ -18,13 +18,16 @@ import { useEffect, useRef, useState, type ReactElement } from 'react'
 import type { Board, BoardColumn } from '../api/boards'
 import { useAuth } from '../auth/AuthContext'
 import { cardsApi, type Card, type CardsApi, type LabelAction } from '../api/cards'
+import { anbieterApi } from '../api/anbieter'
+import type { FremdBoardStand } from '../api/fremdboard'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type BulkAssignResult, type Epic, type EpicsApi } from '../api/epics'
 import { artAusTitel, boardName, useKitNamen, type KitNamenZustand } from '../api/kitNamen'
 import type { Member } from '../api/members'
 import type { Woerterbuch } from '../i18n/de'
-import { useT } from '../i18n/SpracheContext'
+import { formatierer } from '../i18n/format'
+import { useSprache, useT } from '../i18n/SpracheContext'
 import { ablagePosition, activeCardsInColumn, applyMove, applyMoveAt, spaltenAuswahlUmschalten } from '../lib/boardOps'
 import { effektivDone, neighbourColumns } from '../lib/columnMeta'
 import { randGeschwindigkeit } from '../lib/fingerZiehen'
@@ -213,10 +216,38 @@ const KEINE_KARTEN: ReadonlySet<number> = new Set<number>()
 const sortedByNumberMessage = (t: Woerterbuch, columnName: string, sorted: SortDirection) =>
   t.BOARD.SORTIERT(columnName, sorted === 'ASC')
 
+/**
+ * Hinweis über den Spalten eines Boards in GitLab (Issue #2170, Plan #2152 A9): Es wird dort
+ * bearbeitet, und der Stand ist von wann. Scheitert der Abgleich, sagt er, dass der gezeigte Stand
+ * der zuletzt bekannte ist. Als `status`, nicht als `alert`: Er beschreibt die Seite, er meldet kein
+ * Ereignis, und ein Vorleser soll ihn nicht bei jedem Öffnen dazwischenrufen.
+ */
+function FremdBoardHinweis({ stand }: Readonly<{ stand: FremdBoardStand }>) {
+  const t = useT()
+  const { sprache } = useSprache()
+  const zeit = stand.standAm === null ? null : formatierer(sprache).datumUhrzeit(stand.standAm)
+  let standText: string
+  if (stand.abgleichGescheitert) {
+    standText = zeit === null ? t.BOARD.FREMD_NICHT_ERREICHBAR_OHNE_STAND : t.BOARD.FREMD_STAND_ALT(zeit)
+  } else {
+    standText = zeit === null ? t.BOARD.FREMD_NOCH_KEIN_STAND : t.BOARD.FREMD_STAND(zeit)
+  }
+  return (
+    <Alert role="status" severity={stand.abgleichGescheitert ? 'warning' : 'info'} sx={{ mb: '14px' }}>
+      {t.BOARD.FREMD_HINWEIS} {standText}
+    </Alert>
+  )
+}
+
 interface Props {
   board: Board
   initialCards: Card[]
   canEdit: boolean
+  /**
+   * Auskunft über ein Board in einem fremden System (`fremdBoardApi.stand`, Issue #2170). Liegt es
+   * dort, steht über den Spalten der Hinweis mit Stand-Zeit; die Sperre selbst trägt `canEdit`.
+   */
+  fremdBoard?: FremdBoardStand | null
   epics?: Epic[]
   /**
    * Auf diesem Board ausgeblendete Vorhaben (`Epic.id`). Der Zustand liegt bei `BoardPage`, weil
@@ -346,6 +377,7 @@ export function BoardView({
   board,
   initialCards,
   canEdit,
+  fremdBoard = null,
   epics = [],
   hiddenEpics = LEERE_AUSBLENDUNG,
   onHiddenEpicsChange = () => {},
@@ -426,6 +458,23 @@ export function BoardView({
   }, [epicFilter, hiddenEpics, board.id])
 
   useEffect(() => setCards(initialCards), [initialCards])
+
+  // Karten, die auf den Kunden warten (Issue #2218, Plan #2206 E14): Der Server nennt sie je
+  // Projekt; das Board markiert seine. Neu gelesen mit jedem Laden der Karten, etwa nach einer
+  // Antwort. Ohne Antwort des Servers bleibt jede Markierung aus.
+  const [wartendeIds, setWartendeIds] = useState<ReadonlySet<number>>(() => new Set())
+  useEffect(() => {
+    let aktiv = true
+    anbieterApi.wartetAufDich(board.projectId).then(
+      (karten) => {
+        if (aktiv) setWartendeIds(new Set(karten.filter((k) => k.boardId === board.id).map((k) => k.cardId)))
+      },
+      () => {},
+    )
+    return () => {
+      aktiv = false
+    }
+  }, [board.projectId, board.id, initialCards])
 
   const sortColumns = (cols: BoardColumn[]) => [...cols].sort((a, b) => a.position - b.position)
   const [columns, setColumns] = useState<BoardColumn[]>(() => sortColumns(board.columns))
@@ -1015,6 +1064,7 @@ export function BoardView({
 
   return (
     <Box>
+      {fremdBoard?.imFremdsystem === true && <FremdBoardHinweis stand={fremdBoard} />}
       {/* Werkzeugleiste (Entwurf `.werkzeugleiste`, Z. 797–842): Filter links, Dichte und Aktionen rechts. */}
       {columns.length > 0 && (
         <Box
@@ -1189,6 +1239,7 @@ export function BoardView({
                 // Was die Spalte gerade zeigt — Grundlage des Spalten-Kästchens und der Karten.
                 angezeigteKarten={angezeigteKarten}
                 nachtlauf={nachtlaufKnopf(angezeigteKarten)}
+                wartendeIds={wartendeIds}
                 epics={epics}
                 dichte={dichte}
                 selectionMode={selectionMode}
@@ -1210,7 +1261,7 @@ export function BoardView({
                 onKarteUeber={() => setAblageSpalteId(column.id)}
                 onKarteAbgelegt={(cardId) => {
                   zugBeenden()
-                  if (cardId && !inVorschau) {
+                  if (cardId && canEdit && !inVorschau) {
                     karteAbgelegt(cardId, column.id)
                   }
                 }}

@@ -11,6 +11,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
@@ -618,11 +619,112 @@ class CardArchiveServiceTest {
   }
 
   @Test
+  void vertraulicheEntfernen_entferntTrefferAufDemBoardUndImPapierkorb_ohneRechtepruefung() {
+    // Given: Issue #2200 — Nummer 1 steht auf dem Board, 3 im Papierkorb; 2 ist nicht gemeint,
+    // eine Karte ohne Nummer auch nicht.
+    Card ohneNummer =
+        new Card(
+            4L,
+            BOARD,
+            20L,
+            null,
+            "Titel",
+            null,
+            0,
+            false,
+            null,
+            1L,
+            FIXED,
+            FIXED,
+            CardType.CARD,
+            null,
+            null,
+            null,
+            PROJECT,
+            null,
+            null,
+            null,
+            null);
+    when(cards.findByProjectId(PROJECT))
+        .thenReturn(
+            List.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null),
+                card(2L, 20L, 2, false, null, CardType.CARD, null, null),
+                ohneNummer));
+    when(cards.findTrashByBoardId(BOARD))
+        .thenReturn(List.of(card(3L, 20L, 3, false, null, CardType.CARD, null, null)));
+
+    // When
+    int entfernt = service.vertraulicheEntfernen(PROJECT, BOARD, List.of(1, 3));
+
+    // Then
+    assertThat(entfernt).isEqualTo(2);
+    InOrder inOrder = inOrder(events, bestand, cards);
+    inOrder.verify(events).publishEvent(new CardsPurgedEvent(List.of(1L)));
+    inOrder.verify(bestand).bewahreHerkunftsnummern(List.of(1L));
+    inOrder.verify(cards).deleteById(1L);
+    inOrder.verify(cards).deleteById(3L);
+    verify(dependencies).deleteByCardId(3L);
+    verify(cards, never()).deleteById(2L);
+    verify(cards, never()).deleteById(4L);
+    verifyNoInteractions(permissions);
+  }
+
+  @Test
   void failedMutation_publishesNoEvent() {
     when(cards.findById(1L)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.archive(1L, 1L)).isInstanceOf(CardNotFoundException.class);
 
     verify(events, never()).publishEvent(any());
+  }
+
+  // --- Kunde ohne REPAIR_READ (Issue #2211) -----------------------------
+
+  /** Die Karte 2 mit der Nummer 2 trägt kit:repair. */
+  private void reparaturkarte2() {
+    when(cardLabels.kartenMitLabel(PROJECT, "kit:repair")).thenReturn(List.of(2L));
+    when(cards.findByIds(List.of(2L)))
+        .thenReturn(List.of(card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+  }
+
+  @Test
+  void alsKunde_fehltDieReparaturkarteImPapierkorb_samtAbhaengigkeitAufSie() {
+    reparaturkarte2();
+    when(dependencies.findByCardId(1L)).thenReturn(List.of(2));
+    when(cards.findTrashByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null),
+                card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+
+    assertThat(service.listTrash(5L, BOARD))
+        .singleElement()
+        .satisfies(
+            k -> {
+              assertThat(k.id()).isEqualTo(1L);
+              assertThat(k.dependencies()).isEmpty();
+            });
+  }
+
+  @Test
+  void alsKunde_endenArchivierenUndEndgueltigesLoeschenDerReparaturkarteMit404() {
+    reparaturkarte2();
+    when(cards.findById(2L))
+        .thenReturn(Optional.of(card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+
+    assertThatThrownBy(() -> service.archive(5L, 2L)).isInstanceOf(CardNotFoundException.class);
+    assertThatThrownBy(() -> service.purge(5L, 2L)).isInstanceOf(CardNotFoundException.class);
+    verify(cards, never()).deleteById(anyLong());
+  }
+
+  @Test
+  void alsOwner_erscheintDieReparaturkarteImPapierkorb() {
+    reparaturkarte2();
+    when(permissions.hasPermission(5L, PROJECT, Permission.REPAIR_READ)).thenReturn(true);
+    when(cards.findTrashByBoardId(BOARD))
+        .thenReturn(List.of(card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+
+    assertThat(service.listTrash(5L, BOARD)).extracting(CardView::id).containsExactly(2L);
   }
 }

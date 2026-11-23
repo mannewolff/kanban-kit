@@ -37,7 +37,7 @@ public class KanbanAnhangService {
   public List<AttachmentView> list(KanbanPrincipal principal, long cardId) {
     long boardId = requireBound(principal);
     try {
-      ingest.requireReadableOnBoard(cardId, boardId);
+      ingest.requireReadableOnBoard(principal.userId(), cardId, boardId);
       return attachments.list(principal.userId(), cardId);
     } catch (CardNotFoundException | ProjectNotFoundException e) {
       throw unerreichbar(e);
@@ -48,7 +48,7 @@ public class KanbanAnhangService {
   public Download download(KanbanPrincipal principal, long cardId, long attachmentId) {
     long boardId = requireBound(principal);
     try {
-      ingest.requireReadableOnBoard(cardId, boardId);
+      ingest.requireReadableOnBoard(principal.userId(), cardId, boardId);
       return attachments.downloadOnCard(principal.userId(), cardId, attachmentId);
     } catch (CardNotFoundException | ProjectNotFoundException e) {
       throw unerreichbar(e);

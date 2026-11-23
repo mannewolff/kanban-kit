@@ -651,7 +651,14 @@ class MembershipServiceTest {
   }
 
   @ParameterizedTest
-  @CsvSource({"OWNER,MEMBER", "OWNER,VIEWER", "ADMIN,MEMBER", "ADMIN,VIEWER"})
+  @CsvSource({
+    "OWNER,MEMBER",
+    "OWNER,VIEWER",
+    "ADMIN,MEMBER",
+    "ADMIN,VIEWER",
+    "CUSTOMER,MEMBER",
+    "CUSTOMER,VIEWER"
+  })
   void changeRole_meldetDenRollenverlust_beiHerabstufungUnterAdmin(
       ProjectRole vorher, ProjectRole neu) {
     // Given
@@ -671,7 +678,12 @@ class MembershipServiceTest {
     "ADMIN,ADMIN",
     "MEMBER,ADMIN",
     "MEMBER,VIEWER",
-    "VIEWER,MEMBER"
+    "VIEWER,MEMBER",
+    "ADMIN,CUSTOMER",
+    "OWNER,CUSTOMER",
+    "CUSTOMER,ADMIN",
+    "CUSTOMER,CUSTOMER",
+    "MEMBER,CUSTOMER"
   })
   void changeRole_meldetNichts_wennKeinAdminrechtVerlorenGeht(ProjectRole vorher, ProjectRole neu) {
     // Given
