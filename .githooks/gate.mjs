@@ -402,7 +402,7 @@ const ohneRepoBindung = (env) => Object.fromEntries(Object.entries(env).filter((
 function kartenpruefungAnstossen(hook) {
   const kitDir = kitVerzeichnis();
   if (!kitDir || !kartenpruefungInPro(kitDir) || !aufHauptzweigDerHauptkopie()) return;
-  const res = spawnSync(process.execPath, [join(kitDir, "night.mjs"), "--card-check", "--detach"], {
+  const res = spawnSync(process.execPath, [join(kitDir, "night.mjs"), "--card-check", "--detach", "--from-hook"], {
     cwd: process.cwd(), env: ohneRepoBindung(process.env), stdio: ["ignore", "inherit", "pipe"], encoding: "utf-8", timeout: 60_000,
   });
   if (!res.error && res.status === 0) {
