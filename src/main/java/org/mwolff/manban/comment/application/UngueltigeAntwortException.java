@@ -1,5 +1,6 @@
 package org.mwolff.manban.comment.application;
 
+import java.io.Serializable;
 import org.mwolff.manban.common.i18n.UebersetzbareMeldung;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -10,9 +11,9 @@ public final class UngueltigeAntwortException extends RuntimeException
     implements UebersetzbareMeldung {
 
   private final String meldungsSchluessel;
-  private final Object[] meldungsArgumente;
+  private final Serializable[] meldungsArgumente;
 
-  private UngueltigeAntwortException(String meldung, String schluessel, Object... argumente) {
+  private UngueltigeAntwortException(String meldung, String schluessel, Serializable... argumente) {
     super(meldung);
     this.meldungsSchluessel = schluessel;
     this.meldungsArgumente = argumente.clone();
