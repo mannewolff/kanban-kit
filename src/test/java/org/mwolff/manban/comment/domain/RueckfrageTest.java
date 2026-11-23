@@ -140,6 +140,36 @@ class RueckfrageTest {
   }
 
   @Test
+  void objektStattListeTraegtKeineEintraege() {
+    // Given: ein Objekt, dessen Wert wie ein Eintrag aussieht
+    String text = "## Rückfrage\n```json kit-vorlage\n{\"a\": {\"nr\": 1, \"frage\": \"F\"}}\n```";
+
+    // When / Then
+    assertThat(Rueckfrage.lies(1L, AM, text)).isEmpty();
+  }
+
+  @Test
+  void felderOhneTextOderWahrheitswertZaehlenAlsLeer() {
+    // Given
+    String text =
+        """
+        ## Rückfrage
+        ```json kit-vorlage
+        [{"nr": 1, "frage": 5, "empfehlung": true, "grund": null, "einarbeitung": {"x": 1},
+          "optionen": [{"text": 7, "empfohlen": "true"}]}]
+        ```
+        """;
+
+    // When
+    Rueckfrage rueckfrage = Rueckfrage.lies(1L, AM, text).orElseThrow();
+
+    // Then
+    assertThat(rueckfrage.eintraege())
+        .containsExactly(
+            new Eintrag(1, Art.FRAGE, "", "", "", "", List.of(new Option("", null, false))));
+  }
+
+  @Test
   void blockOhneEndeReichtBisZumTextende() {
     // Given
     String text = "## Rückfrage\n````json   kit-vorlage\n[{\"nr\": 1, \"frage\": \"F\"}]";

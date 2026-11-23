@@ -153,12 +153,11 @@ public record Rueckfrage(
 
   private static List<Eintrag> leseEintraege(JsonNode block) {
     List<Eintrag> eintraege = new ArrayList<>();
-    if (!block.isArray()) {
-      return eintraege;
-    }
-    Set<Integer> vergeben = new HashSet<>();
-    for (JsonNode knoten : block) {
-      leseEintrag(knoten).filter(e -> vergeben.add(e.nr())).ifPresent(eintraege::add);
+    if (block.isArray()) {
+      Set<Integer> vergeben = new HashSet<>();
+      for (JsonNode knoten : block) {
+        leseEintrag(knoten).filter(e -> vergeben.add(e.nr())).ifPresent(eintraege::add);
+      }
     }
     return eintraege;
   }
@@ -175,7 +174,8 @@ public record Rueckfrage(
           new Option(
               text(option, "text"),
               option.path("hinweis").isTextual() ? option.path("hinweis").asText() : null,
-              option.path("empfohlen").isBoolean() && option.path("empfohlen").booleanValue()));
+              // booleanValue() ist für jeden Knoten außer true selbst false
+              option.path("empfohlen").booleanValue()));
     }
     return Optional.of(
         new Eintrag(
