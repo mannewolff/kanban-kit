@@ -92,14 +92,15 @@ class JdbcDeploymentStore implements DeploymentStore {
           + " WHERE s.outcome = 'SUCCESS'"
           + " AND s.finished_at >= e.gemeldet AND s.finished_at < :fensterBeginn)";
 
+  /** Ordnung des jüngsten Versuchs: spätester Abschluss, bei Gleichstand die höhere Id. */
+  private static final String JUENGSTER_ORDNUNG = " ORDER BY finished_at DESC, id DESC LIMIT 1";
+
   private static final String SELECT_LETZTER =
-      SELECT_VERSUCHE + " AND " + VEROEFFENTLICHUNG + " ORDER BY finished_at DESC, id DESC LIMIT 1";
+      SELECT_VERSUCHE + " AND " + VEROEFFENTLICHUNG + JUENGSTER_ORDNUNG;
 
   private static final String SELECT_JUENGSTER =
       "SELECT revision, url, finished_at, created_at FROM deployment_attempt"
           + " WHERE project_id = :projectId AND ";
-
-  private static final String JUENGSTER_ORDNUNG = " ORDER BY finished_at DESC, id DESC LIMIT 1";
 
   private static final String SELECT_JUENGSTE_VORSCHAU =
       SELECT_JUENGSTER + "art = 'vorschau'" + JUENGSTER_ORDNUNG;
