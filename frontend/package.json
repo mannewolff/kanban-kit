@@ -1,6 +1,6 @@
 {
   "name": "manban-frontend",
-  "version": "3.19.2",
+  "version": "3.19.3",
   "private": true,
   "license": "MIT",
   "type": "module",
