@@ -84,4 +84,15 @@ describe('gespraech', () => {
     const [leer] = gespraechAus([kommentar(2, '## Gespräch')])
     expect(leer.text).toBe('')
   })
+
+  it('eine Zeile nur aus Leerraum vor dem Kopf zählt nicht als Kopf', () => {
+    const [b] = gespraechAus([kommentar(1, '   \n## Gespräch\n\nText')])
+    expect(b.text).toBe('Text')
+  })
+
+  it('merkt sich die Sprache des Kopfs jedes Beitrags', () => {
+    const [de, en] = gespraechAus([kommentar(1, '## Gespräch\nHallo'), kommentar(2, '## Conversation\nHi')])
+    expect(de.sprache).toBe('de')
+    expect(en.sprache).toBe('en')
+  })
 })
