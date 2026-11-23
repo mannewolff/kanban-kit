@@ -4929,3 +4929,107 @@ describe('CardDetailModal — Gespräch mit der KI (Issue #2219)', () => {
     expect(await within(gespraech).findByRole('textbox', { name: 'Dein Beitrag' })).toBeDisabled()
   })
 })
+
+describe('CardDetailModal — Karte aus GitLab, nur lesend (Issue #2170, Plan #2152 A10)', () => {
+  const GITLAB = 'https://gitlab.firma.example/team/board/-/issues/5'
+  const ausGitLab: Card = { ...card, externUrl: GITLAB }
+  const HALT = '## Kette angehalten\n\nFrage: Soll der Export auch PDF können?'
+
+  function apisMitFrage() {
+    const apis = makeApis()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([
+      { id: 21, cardId: 100, authorUserId: 8, authorName: 'Kit', body: HALT, createdAt: ERST, updatedAt: ERST },
+    ])
+    return apis
+  }
+
+  it('Szenario: Ein Durchlauf hält an einer Frage an', async () => {
+    const apis = apisMitFrage()
+    render(<CardDetailModal card={ausGitLab} canEdit={false} canModerateComments projectId={9} onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText('Frage: Soll der Export auch PDF können?')).toBeInTheDocument()
+    const verweis = screen.getByRole('link', { name: 'In GitLab öffnen' })
+    expect(verweis).toHaveAttribute('href', GITLAB)
+    expect(verweis).toHaveAttribute('target', '_blank')
+    expect(verweis).toHaveAttribute('rel', 'noopener noreferrer')
+    // Beantwortet wird in GitLab: Hier gibt es weder Kommentarfeld noch Bearbeiten oder Löschen.
+    expect(screen.queryByLabelText('Kommentar schreiben')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Senden' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Kommentar löschen' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Gespräch beginnen' })).toBeDisabled()
+  })
+
+  it('bleibt nur lesend, auch wenn der Aufrufer Bearbeiten erlaubt', async () => {
+    const apis = apisMitFrage()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([
+      { id: 22, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Eigener', createdAt: ERST, updatedAt: ERST },
+    ])
+    render(<CardDetailModal card={ausGitLab} canEdit canModerateComments projectId={9} onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText('Eigener')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'In GitLab öffnen' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Kommentar bearbeiten' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Kommentar löschen' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Kommentar schreiben')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Datei anhängen')).not.toBeInTheDocument()
+  })
+
+  it('sperrt die Antwort auf eine Rückfrage, die in GitLab beantwortet wird', async () => {
+    const apis = apisMitFrage()
+    apis.rueckfragenApi.liste.mockResolvedValue([
+      {
+        kommentarId: 21,
+        angelegtAm: ERST,
+        zustand: 'OFFEN',
+        vorschau: null,
+        commit: null,
+        eintraege: [
+          {
+            nr: 1, art: 'FRAGE', frage: 'Welche Farbe?', empfehlung: 'Blau', grund: 'Passt', einarbeitung: '',
+            optionen: [{ text: 'Blau', hinweis: null, empfohlen: true }],
+            zustand: 'OFFEN', wahl: null, text: null, empfehlungUebernommen: false,
+          },
+        ],
+      },
+    ])
+    render(<CardDetailModal card={ausGitLab} canEdit={false} projectId={9} onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText('Welche Farbe?')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Alles übernehmen' })).toBeDisabled()
+  })
+
+  it('bietet an einer Karte aus GitLab keinen Statuswechsel an', async () => {
+    const apis = apisMitFrage()
+    render(
+      <CardDetailModal
+        card={{ ...ausGitLab, status: 'READY', canSetStatus: true }}
+        canEdit={false}
+        projectId={9}
+        onClose={vi.fn()}
+        {...apis}
+      />,
+    )
+    expect(await screen.findByText('Frage: Soll der Export auch PDF können?')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument()
+  })
+
+  it('macht aus einer Adresse ohne erlaubtes Schema keinen Verweis, bleibt aber nur lesend', async () => {
+    const apis = apisMitFrage()
+    render(<CardDetailModal card={{ ...card, externUrl: 'javascript:alert(1)' }} canEdit onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Frage: Soll der Export auch PDF können?')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'In GitLab öffnen' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Kommentar schreiben')).not.toBeInTheDocument()
+  })
+
+  it('zeigt bei einer eigenen Karte keinen Verweis nach GitLab', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={{ ...card, externUrl: null }} canEdit onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'In GitLab öffnen' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Kommentar schreiben')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Kommentar bearbeiten' })).toBeInTheDocument()
+  })
+})

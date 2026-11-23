@@ -64,6 +64,13 @@ vi.mock('../api/attachments', () => ({
   attachmentsApi: { list: vi.fn().mockResolvedValue([]), upload: vi.fn(), remove: vi.fn(), fetchBlob: vi.fn() },
 }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
+// Board in GitLab (Issue #2170): ohne eigene Angabe liegt das Board in kanban-kit.
+const fremdStand = vi.hoisted(() => ({
+  wert: { imFremdsystem: false, art: null, standAm: null, abgleichGescheitert: false } as unknown,
+}))
+vi.mock('../api/fremdboard', () => ({
+  fremdBoardApi: { stand: vi.fn(() => Promise.resolve(fremdStand.wert)) },
+}))
 // Editiermodus gemockt: Bestandstests laufen mit editMode=true (Bleistifte sichtbar); der
 // Editiermodus-aus-Test schaltet editMode.value=false.
 const editMode = vi.hoisted(() => ({ value: true }))
@@ -74,6 +81,7 @@ beforeEach(() => {
   editMode.value = true
   platformRole = 'USER'
   vorschau = null
+  fremdStand.wert = { imFremdsystem: false, art: null, standAm: null, abgleichGescheitert: false }
 })
 
 const mockedBoards = boardsApi as unknown as {
@@ -1124,5 +1132,56 @@ describe('BoardPage — Ansicht als XY (Issue #1926)', () => {
     expect(screen.queryByLabelText('Neuer Board-Name')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Labels' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Papierkorb' })).toBeEnabled()
+  })
+})
+
+describe('BoardPage — Board in GitLab (Issue #2170, Plan #2152 A9, A10)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const spalten = [
+    { id: 10, name: 'Backlog', position: 0, wipLimit: null },
+    { id: 11, name: 'Ready', position: 1, wipLimit: null },
+  ]
+  const ausGitLab = {
+    id: 100, boardId: 1, columnId: 11, number: 7, title: 'Login über GitLab', description: null, excerpt: null,
+    positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+    type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+    derivedFrom: null, status: 'READY' as const, canSetStatus: false, herkunft: null,
+    externUrl: 'https://gitlab.firma.example/team/board/-/issues/7',
+  }
+
+  it('Szenario: Owner bindet ein selbst betriebenes GitLab an', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    fremdStand.wert = { imFremdsystem: true, art: 'GITLAB', standAm: '2026-11-23T09:00:00Z', abgleichGescheitert: false }
+    mockedBoards.get.mockResolvedValue({ id: 1, projectId: 9, name: 'B', createdAt: '', columns: spalten })
+    mockedCards.list.mockResolvedValue([ausGitLab])
+    mockedEpics.list.mockResolvedValue([])
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
+    render(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={['/boards/1']}>
+          <Routes>
+            <Route path="/boards/:boardId" element={<BoardPage />} />
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+    )
+
+    // Die Karte aus GitLab steht in der Spalte ihres Status, und das Board ist nur lesend.
+    const karte = await screen.findByTestId('card-100')
+    expect(within(screen.getByTestId('column-11')).getByTestId('card-100')).toBeInTheDocument()
+    expect(await screen.findByRole('status')).toHaveTextContent('Dieses Board liegt in GitLab und wird dort bearbeitet.')
+    expect(screen.queryByRole('button', { name: 'Neu anlegen' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Papierkorb' })).not.toBeInTheDocument()
+    expect(karte).toHaveAttribute('draggable', 'false')
+
+    fireEvent.click(karte)
+    const dialog = await screen.findByRole('dialog')
+    const verweis = within(dialog).getByRole('link', { name: 'In GitLab öffnen' })
+    expect(verweis).toHaveAttribute('href', 'https://gitlab.firma.example/team/board/-/issues/7')
+    expect(within(dialog).queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
   })
 })

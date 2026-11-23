@@ -557,6 +557,7 @@ function CommentsSection({
   comments,
   currentUserId,
   canModerateComments,
+  schreibbar,
   editingCommentId,
   editingBody,
   newComment,
@@ -571,6 +572,8 @@ function CommentsSection({
   comments: Comment[]
   currentUserId: number | undefined
   canModerateComments: boolean
+  /** `false` an einer Karte aus GitLab: Kommentare nur lesen, der Server lehnt jedes Schreiben ab (Issue #2170). */
+  schreibbar: boolean
   editingCommentId: number | null
   editingBody: string
   newComment: string
@@ -610,7 +613,7 @@ function CommentsSection({
                 </Stack>
                 <Stack direction="row" spacing={0.5}>
                   {/* Bearbeiten darf nur der Autor selbst. */}
-                  {isAuthor && editingCommentId !== c.id && (
+                  {schreibbar && isAuthor && editingCommentId !== c.id && (
                     <VorschauGesperrt>
                       <IconButton size="small" aria-label={t.KARTE.KOMMENTAR_BEARBEITEN} onClick={() => onStartEdit(c)}>
                         ✎
@@ -618,7 +621,7 @@ function CommentsSection({
                     </VorschauGesperrt>
                   )}
                   {/* Löschen ist Moderation: nur Admin/Owner (bzw. Plattform-Admin). */}
-                  {canModerateComments && (
+                  {schreibbar && canModerateComments && (
                     <VorschauGesperrt>
                       <IconButton size="small" aria-label={t.KARTE.KOMMENTAR_LOESCHEN} onClick={() => onDelete(c.id)}>
                         ✕
@@ -650,21 +653,23 @@ function CommentsSection({
         {comments.length === 0 && <Typography color="text.secondary">{t.KARTE.KEINE_KOMMENTARE}</Typography>}
       </Stack>
       {/* alignItems explizit: sonst zieht der Default `stretch` den Senden-Button auf Feldhöhe. */}
-      <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mt: 1 }}>
-        {/* Das Feld trägt seinen Namen am Eingabeelement; dort steht in der Vorschau der Hinweis. */}
-        <VorschauGesperrt>
-          <TextField {...commentFieldProps} size="small" fullWidth placeholder={t.KARTE.KOMMENTAR_SCHREIBEN} value={newComment}
-            onChange={(e) => onNewCommentChange(e.target.value)}
-            error={isTooLong(newComment)}
-            helperText={isTooLong(newComment) ? tooLongMessage(newComment.length, sprache) : undefined}
-            slotProps={{ htmlInput: { 'aria-label': vorschau ? t.VORSCHAU.GESPERRT : t.KARTE.KOMMENTAR_SCHREIBEN } }} />
-        </VorschauGesperrt>
-        <VorschauGesperrt>
-          <Button variant="contained" size="small" onClick={onAdd} disabled={isTooLong(newComment)}>
-            {t.KARTE.SENDEN}
-          </Button>
-        </VorschauGesperrt>
-      </Stack>
+      {schreibbar && (
+        <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mt: 1 }}>
+          {/* Das Feld trägt seinen Namen am Eingabeelement; dort steht in der Vorschau der Hinweis. */}
+          <VorschauGesperrt>
+            <TextField {...commentFieldProps} size="small" fullWidth placeholder={t.KARTE.KOMMENTAR_SCHREIBEN} value={newComment}
+              onChange={(e) => onNewCommentChange(e.target.value)}
+              error={isTooLong(newComment)}
+              helperText={isTooLong(newComment) ? tooLongMessage(newComment.length, sprache) : undefined}
+              slotProps={{ htmlInput: { 'aria-label': vorschau ? t.VORSCHAU.GESPERRT : t.KARTE.KOMMENTAR_SCHREIBEN } }} />
+          </VorschauGesperrt>
+          <VorschauGesperrt>
+            <Button variant="contained" size="small" onClick={onAdd} disabled={isTooLong(newComment)}>
+              {t.KARTE.SENDEN}
+            </Button>
+          </VorschauGesperrt>
+        </Stack>
+      )}
     </Box>
   )
 }
@@ -1422,9 +1427,30 @@ function mitBoardBindung(card: CardDetail): card is CardDetail & { boardId: numb
   return 'boardId' in card
 }
 
+/**
+ * Eine Karte aus GitLab ist nur lesend, gleich was der Aufrufer erlaubt (Issue #2170, Plan #2152
+ * A10): Der Server lehnt dort jedes Schreiben ab. Der Verweis „In GitLab öffnen“ geht nur mit
+ * erlaubtem Schema hinaus; eine andere Adresse ergibt keinen Verweis, die Karte bleibt nur lesend.
+ */
+function fremdSicht(
+  card: CardDetail,
+  canEditRolle: boolean,
+  vorschau: boolean,
+): { ausFremdsystem: boolean; externHref: string | undefined; canEdit: boolean; verlaufGesperrt: boolean } {
+  const externUrl = card.externUrl ?? null
+  const ausFremdsystem = externUrl !== null
+  return {
+    ausFremdsystem,
+    externHref: safeLinkHref(externUrl ?? undefined),
+    canEdit: canEditRolle && !ausFremdsystem,
+    // Rückfragen und Gespräch: gesperrt in der Vorschau und an einer Karte aus GitLab.
+    verlaufGesperrt: vorschau || ausFremdsystem,
+  }
+}
+
 function CardDetailModalView({
   card,
-  canEdit,
+  canEdit: canEditRolle,
   canModerateComments = false,
   onClose,
   onChanged,
@@ -1452,6 +1478,7 @@ function CardDetailModalView({
   const { user, vorschau: laufendeVorschau } = useAuth()
   // In der „Ansicht als XY“ ist alles Verändernde gesperrt (Plan #1914, E15).
   const vorschau = Boolean(laufendeVorschau)
+  const { ausFremdsystem, externHref, canEdit, verlaufGesperrt } = fremdSicht(card, canEditRolle, vorschau)
   const t = useT()
   const isEpic = card.type === 'EPIC'
   const [assigneeIds, setAssigneeIds] = useState<number[]>(card.assignees)
@@ -2038,7 +2065,7 @@ function CardDetailModalView({
             isEpic={isEpic}
             columnName={columnName}
             status={status}
-            canSetStatus={card.canSetStatus && location?.board.archived !== true}
+            canSetStatus={card.canSetStatus && !ausFremdsystem && location?.board.archived !== true}
             archived={card.archived}
             editing={editing}
             onSetStatus={setzeStatus}
@@ -2058,6 +2085,11 @@ function CardDetailModalView({
                 {t.KARTE.ABNAHME}
               </Button>
             </VorschauGesperrt>
+          )}
+          {externHref !== undefined && (
+            <Button size="small" variant="outlined" href={externHref} target="_blank" rel="noopener noreferrer">
+              {t.KARTE.IN_GITLAB_OEFFNEN}
+            </Button>
           )}
           {canEdit && !editing && (
             <VorschauGesperrt>
@@ -2292,7 +2324,7 @@ function CardDetailModalView({
               <RueckfragenAbschnitt
                 cardId={card.id}
                 stand={rueckfragenStand}
-                gesperrt={vorschau}
+                gesperrt={verlaufGesperrt}
                 api={rueckfragenApi}
               />
 
@@ -2301,7 +2333,7 @@ function CardDetailModalView({
               <GespraechVerlauf
                 cardId={card.id}
                 comments={comments}
-                gesperrt={vorschau}
+                gesperrt={verlaufGesperrt}
                 api={commentsApi}
                 onGesendet={(neu) => setComments((c) => [neu, ...c])}
               />
@@ -2311,6 +2343,7 @@ function CardDetailModalView({
                 comments={ohneGespraech(sichtbareKommentare(rueckfragenStand.rueckfragen, comments))}
                 currentUserId={user?.userId}
                 canModerateComments={canModerateComments}
+                schreibbar={!ausFremdsystem}
                 editingCommentId={editingCommentId}
                 editingBody={editingBody}
                 newComment={newComment}

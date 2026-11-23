@@ -6,6 +6,8 @@ import type { Board } from '../api/boards'
 import { cardsApi } from '../api/cards'
 import type { Card } from '../api/cards'
 import type { Epic } from '../api/epics'
+import type { FremdBoardStand } from '../api/fremdboard'
+import { formatierer } from '../i18n/format'
 import { ApiError } from '../api/client'
 import { columnsApi } from '../api/columns'
 import { boardsApi } from '../api/boards'
@@ -4856,5 +4858,123 @@ describe('BoardView — Markierung „wartet auf dich“ (Issue #2218)', () => {
 
     await waitFor(() => expect(wartet).toHaveBeenCalled())
     expect(screen.queryByText('wartet auf dich')).not.toBeInTheDocument()
+  })
+})
+
+describe('BoardView — Board in GitLab, nur lesend (Issue #2170, Plan #2152 A9)', () => {
+  const inGitLab = (over: Partial<FremdBoardStand> = {}): FremdBoardStand => ({
+    imFremdsystem: true,
+    art: 'GITLAB',
+    standAm: '2026-11-23T09:00:00Z',
+    abgleichGescheitert: false,
+    ...over,
+  })
+  const zeit = (iso: string) => formatierer('de').datumUhrzeit(iso)
+
+  beforeEach(() => {
+    editMode.value = true
+  })
+
+  it('Szenario: Board öffnen', () => {
+    const api = mkApi({ move: vi.fn().mockResolvedValue(undefined) })
+    render(<BoardView board={board} initialCards={[card]} canEdit={false} fremdBoard={inGitLab()} api={api} />)
+
+    const hinweis = screen.getByRole('status')
+    expect(hinweis).toHaveTextContent('Dieses Board liegt in GitLab und wird dort bearbeitet.')
+    expect(hinweis).toHaveTextContent(`Stand: ${zeit('2026-11-23T09:00:00Z')}`)
+    expect(hinweis).toHaveClass('MuiAlert-standardInfo')
+
+    const karte = screen.getByTestId('card-100')
+    expect(karte).toHaveAttribute('draggable', 'false')
+    fireEvent.dragStart(karte, { dataTransfer: { setData: vi.fn() } })
+    dropOnColumn(20, 100)
+    expect(api.move).not.toHaveBeenCalled()
+
+    expect(screen.queryByRole('button', { name: 'Neu anlegen' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Menü Aufgabe' })).not.toBeInTheDocument()
+  })
+
+  it('Szenario: GitLab ist nicht erreichbar', () => {
+    render(
+      <BoardView
+        board={board}
+        initialCards={[card]}
+        canEdit={false}
+        fremdBoard={inGitLab({ standAm: '2026-11-23T08:00:00Z', abgleichGescheitert: true })}
+        api={mkApi()}
+      />,
+    )
+
+    expect(screen.getByTestId('card-100')).toHaveTextContent('Aufgabe')
+    const hinweis = screen.getByRole('status')
+    expect(hinweis).toHaveTextContent('Dieses Board liegt in GitLab und wird dort bearbeitet.')
+    expect(hinweis).toHaveTextContent(
+      `GitLab ist gerade nicht erreichbar. Stand von ${zeit('2026-11-23T08:00:00Z')}.`,
+    )
+    expect(hinweis).not.toHaveTextContent('Stand: ')
+    expect(hinweis).toHaveClass('MuiAlert-standardWarning')
+  })
+
+  it('nennt vor dem ersten Abgleich, dass noch kein Stand da ist', () => {
+    render(<BoardView board={board} initialCards={[]} canEdit={false} fremdBoard={inGitLab({ standAm: null })} api={mkApi()} />)
+    const hinweis = screen.getByRole('status')
+    expect(hinweis).toHaveTextContent('Noch kein Stand aus GitLab.')
+    expect(hinweis).not.toHaveTextContent('nicht erreichbar')
+  })
+
+  it('nennt bei gescheitertem ersten Abgleich beides', () => {
+    render(
+      <BoardView
+        board={board}
+        initialCards={[]}
+        canEdit={false}
+        fremdBoard={inGitLab({ standAm: null, abgleichGescheitert: true })}
+        api={mkApi()}
+      />,
+    )
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'GitLab ist gerade nicht erreichbar. Noch kein Stand aus GitLab.',
+    )
+  })
+
+  it('zeigt keinen Hinweis bei einem eigenen Board', () => {
+    render(
+      <BoardView
+        board={board}
+        initialCards={[card]}
+        canEdit
+        fremdBoard={{ imFremdsystem: false, art: null, standAm: null, abgleichGescheitert: false }}
+        api={mkApi()}
+      />,
+    )
+    expect(screen.queryByText(/liegt in GitLab/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt keinen Hinweis ohne Auskunft', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+    expect(screen.queryByText(/liegt in GitLab/)).not.toBeInTheDocument()
+  })
+
+  it('spricht Englisch, wenn die Oberfläche Englisch ist', () => {
+    renderMitSprache(
+      <BoardView board={board} initialCards={[]} canEdit={false} fremdBoard={inGitLab({ abgleichGescheitert: true })} api={mkApi()} />,
+      'en',
+    )
+    const hinweis = screen.getByRole('status')
+    expect(hinweis).toHaveTextContent(en.BOARD.FREMD_HINWEIS)
+    expect(hinweis).toHaveTextContent(
+      en.BOARD.FREMD_STAND_ALT(formatierer('en').datumUhrzeit('2026-11-23T09:00:00Z')),
+    )
+  })
+
+  it('nennt den Stand auf Englisch, wenn der Abgleich gelingt', () => {
+    renderMitSprache(
+      <BoardView board={board} initialCards={[]} canEdit={false} fremdBoard={inGitLab()} api={mkApi()} />,
+      'en',
+    )
+    expect(screen.getByRole('status')).toHaveTextContent(
+      `${en.BOARD.FREMD_HINWEIS} ${en.BOARD.FREMD_STAND(formatierer('en').datumUhrzeit('2026-11-23T09:00:00Z'))}`,
+    )
   })
 })

@@ -486,6 +486,12 @@ export const de = {
     MARKDOWN_WAEHLEN: 'Markdown-Datei auswählen',
     NEU_ANLEGEN: 'Neu anlegen',
     WAAGERECHT_ROLLEN: 'Weitere Spalten: waagerecht rollen',
+    /** Hinweis über den Spalten eines Boards in GitLab (Issue #2170, Plan #2152 A9). */
+    FREMD_HINWEIS: 'Dieses Board liegt in GitLab und wird dort bearbeitet.',
+    FREMD_STAND: (zeit: string) => `Stand: ${zeit}`,
+    FREMD_STAND_ALT: (zeit: string) => `GitLab ist gerade nicht erreichbar. Stand von ${zeit}.`,
+    FREMD_NOCH_KEIN_STAND: 'Noch kein Stand aus GitLab.',
+    FREMD_NICHT_ERREICHBAR_OHNE_STAND: 'GitLab ist gerade nicht erreichbar. Noch kein Stand aus GitLab.',
     SPALTE: 'Spalte',
     NEUE_SPALTE: 'Neue Spalte',
     SPALTE_BEARBEITEN: 'Spalte bearbeiten',
@@ -716,6 +722,8 @@ export const de = {
     VORSCHAU_FEHLER: 'Vorschau konnte nicht geladen werden.',
     ABNAHME: 'Abnahme durchklicken',
     BEARBEITEN: 'Bearbeiten',
+    /** Verweis einer Karte aus GitLab auf ihr Original (Issue #2170, Plan #2152 A10). */
+    IN_GITLAB_OEFFNEN: 'In GitLab öffnen',
     FORTSCHRITT: 'Fortschritt',
     NICHT_GEFUNDEN: (nummer: number) => `Karte #${nummer} nicht gefunden — gelöscht oder kein Zugriff.`,
   },

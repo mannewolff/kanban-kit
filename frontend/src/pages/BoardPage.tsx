@@ -201,7 +201,7 @@ export function BoardPage() {
   // Plattform-Admin ist synchron aus dem Auth-Context ableitbar (kein Race) und bleibt deshalb hier;
   // die Projektrolle kommt zentral aus useProjectRole.
   const admin = isPlatformAdmin(user)
-  const { effectiveRole, canEdit, canModerate } = useProjectRole(projectId ?? null)
+  const { effectiveRole, canEdit, canModerate, fremdBoard } = useProjectRole(projectId ?? null)
   const { editMode } = useEditMode()
   // Board-Verwaltung (Umbenennen, Label-Verwaltung) nur im Editiermodus sichtbar; der Papierkorb-
   // Zugang bleibt als operativer Alltag an canEdit.
@@ -280,6 +280,7 @@ export function BoardPage() {
         board={board}
         initialCards={cards}
         canEdit={canEdit}
+        fremdBoard={fremdBoard}
         epics={epics}
         hiddenEpics={hiddenEpics}
         onHiddenEpicsChange={changeHiddenEpics}
