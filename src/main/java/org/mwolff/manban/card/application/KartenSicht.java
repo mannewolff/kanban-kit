@@ -96,10 +96,7 @@ public final class KartenSicht {
    */
   public List<CardView> listenSicht(long userId, long projectId, List<Card> alleKarten) {
     Set<Integer> verborgen = anbieter.verborgeneNummern(userId, projectId);
-    List<Card> karten =
-        verborgen.isEmpty()
-            ? alleKarten
-            : alleKarten.stream().filter(c -> !verborgen.contains(c.number())).toList();
+    List<Card> karten = Anbietersicht.ohneVerborgene(alleKarten, verborgen);
     Set<Long> ids = karten.stream().map(Card::requireId).collect(Collectors.toSet());
     // Karten ohne Eintrag fehlen in den Maps (Vertrag der drei findByCardIds) — die Sicht setzt
     // dort eine leere Liste, nie null.
