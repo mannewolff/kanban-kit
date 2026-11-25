@@ -19,7 +19,10 @@ import org.mwolff.manban.comment.domain.Rueckfrage.Eintrag;
  *   <li>Gültig ist eine Antwort nur, wenn sie auf diese Rückfrage verweist, kein Beitrag der KI ist
  *       und nicht über einen gewöhnlichen Zugang ({@code STANDARD}) kam. Trägt sie einen {@code
  *       commit}, muss er der Stand sein, den die Rückfrage zur Freigabe stellt — bei einer
- *       überholten Rückfrage der der jüngsten Vorschau.
+ *       überholten Rückfrage der der jüngsten Vorschau. Und sie muss nach der letzten Änderung der
+ *       Rückfrage eingegangen sein: Eine Zustimmung gilt der Fassung, die der Mensch gesehen hat —
+ *       tauscht der Autor danach Fragen oder Empfehlungen aus, braucht die neue Fassung eine neue
+ *       Antwort (Issue #2262).
  *   <li>Die gültigen Antworten gelten in zeitlicher Reihenfolge: {@code ja} übernimmt die
  *       Empfehlung jeder noch nicht beantworteten Frage, {@code weg} beantwortet die Einträge der
  *       Art Weg, jede Einzelantwort setzt den Stand ihrer Frage. Eine spätere Antwort ergänzt so
@@ -109,6 +112,7 @@ public final class RueckfragenAuswertung {
     rueckfrage.eintraege().forEach(e -> staende.put(e.nr(), FrageStand.offen(e.nr())));
     antworten.stream()
         .filter(a -> a.antwort().vorlage() == rueckfrage.kommentarId())
+        .filter(a -> a.am().isAfter(rueckfrage.geaendertAm()))
         .filter(a -> gueltig(a, rueckfrage.istFreigabe(), bezug))
         .sorted(Comparator.comparing(EingegangeneAntwort::am))
         .forEach(a -> anwenden(rueckfrage, a.antwort(), staende));

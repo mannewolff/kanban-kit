@@ -42,9 +42,9 @@
  */
 
 import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 import { aufgenommene, kandidat as kandidatVon, mutateFuer } from '../frontend/mutationsbereich.mjs';
 import { kartenTitel } from './mutationskarten.mjs';
@@ -1546,6 +1546,61 @@ function strykerLaufen({ wurzel, starte, args }) {
   return { ergebnis, bericht: jsonLesen(berichtsPfad) };
 }
 
+/**
+ * Der Takt des Lebenszeichens (Issue #2263). `checks.mjs` bricht eine Mutationspruefung nach fest
+ * 5 Minuten ohne Ausgabe als haengend ab (Kit-Issue #2390). Der Treiber wartet aber synchron auf
+ * Stryker bzw. PIT und reicht deren Ausgabe nach Festlegung 2 nie durch — ein gesunder Lauf ueber
+ * fuenf Minuten sah darum aus wie ein haengender. Eine Minute laesst reichlich Abstand zur Grenze.
+ */
+export const LEBENSZEICHEN_MS = 60 * 1000;
+
+/**
+ * Das Skript des Begleitprozesses, als `node -e` mit den Argumenten Takt (ms), Prozessnummer des
+ * Treibers und Werkzeugname. Es schreibt im Takt eine Zeile auf die geerbte Standardausgabe und
+ * endet von selbst, sobald es den Treiber nicht mehr gibt (`ESRCH`) — ein abgestuerzter Treiber
+ * hinterlaesst so keinen Waisen, der die Stillewache von `checks.mjs` endlos aufzoege. Die Zeile traegt kein
+ * Fehlermerkmal (`[ERROR]`, `BUILD FAILURE`), das `checks.mjs` rot faerben wuerde.
+ */
+export const LEBENSZEICHEN_SKRIPT = [
+  'const [takt, treiber, werkzeug] = process.argv.slice(1);',
+  'const beginn = Date.now();',
+  'setInterval(() => {',
+  '  try { process.kill(Number(treiber), 0); } catch (fehler) { if (fehler.code === \'ESRCH\') process.exit(0); }',
+  '  const minuten = Math.round((Date.now() - beginn) / 60000);',
+  '  process.stdout.write(`Mutationswerkzeug ${werkzeug} läuft noch (${minuten} min) …\\n`);',
+  '}, Number(takt));',
+].join('\n');
+
+/**
+ * Startet den Begleitprozess zum Werkzeug `name` und gibt die Funktion zurueck, die ihn beendet.
+ * `spawn` legt den Prozess sofort an; er schreibt auch, waehrend `spawnSync` den Treiber blockiert.
+ */
+function begleiterStarten(name) {
+  const kind = spawn(process.execPath, ['-e', LEBENSZEICHEN_SKRIPT, String(LEBENSZEICHEN_MS), String(process.pid), name], {
+    stdio: ['ignore', 'inherit', 'ignore'],
+  });
+  kind.on('error', () => {});
+  kind.unref();
+  return () => {
+    kind.kill();
+  };
+}
+
+/**
+ * Umhuellt einen synchronen Werkzeugstart mit dem Lebenszeichen: Begleiter vor dem Start an,
+ * danach aus — auch wenn der Start wirft. Rueckgabe und Ausgabe des Werkzeugs bleiben unberuehrt.
+ */
+export function mitLebenszeichen(starte, begleiter = begleiterStarten) {
+  return (befehl, args, optionen) => {
+    const beenden = begleiter(basename(befehl));
+    try {
+      return starte(befehl, args, optionen);
+    } finally {
+      beenden();
+    }
+  };
+}
+
 /** PIT schreibt seinen XML-Bericht unversioniert nach `target/` — es gibt ihn also fertig. */
 const PIT_BERICHT_TEILE = ['target', 'pit-reports', 'mutations.xml'];
 
@@ -1803,7 +1858,7 @@ export function laufen(argv, umgebung = {}) {
   });
   const git = umgebung.git ?? ((...args) => spawnSync('git', args, { cwd: wurzel, encoding: 'utf-8' }));
   const starte = umgebung.starte
-    ?? ((befehl, args, optionen) => spawnSync(befehl, args, { encoding: 'utf-8', ...optionen }));
+    ?? mitLebenszeichen((befehl, args, optionen) => spawnSync(befehl, args, { encoding: 'utf-8', ...optionen }));
   const karten = umgebung.karten ?? kartenProzess(wurzel);
   const beginn = jetzt();
 

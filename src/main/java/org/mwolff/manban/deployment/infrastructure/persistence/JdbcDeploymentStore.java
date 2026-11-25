@@ -38,6 +38,8 @@ class JdbcDeploymentStore implements DeploymentStore {
 
   private static final String P_ART = "art";
 
+  private static final String P_REVISION = "revision";
+
   /** Bedingung einer Veröffentlichung; eine Meldung ohne Art zählt dazu. */
   private static final String VEROEFFENTLICHUNG = "(art IS NULL OR art = 'veroeffentlichung')";
 
@@ -92,14 +94,15 @@ class JdbcDeploymentStore implements DeploymentStore {
           + " WHERE s.outcome = 'SUCCESS'"
           + " AND s.finished_at >= e.gemeldet AND s.finished_at < :fensterBeginn)";
 
+  /** Ordnung des jüngsten Versuchs: spätester Abschluss, bei Gleichstand die höhere Id. */
+  private static final String JUENGSTER_ORDNUNG = " ORDER BY finished_at DESC, id DESC LIMIT 1";
+
   private static final String SELECT_LETZTER =
-      SELECT_VERSUCHE + " AND " + VEROEFFENTLICHUNG + " ORDER BY finished_at DESC, id DESC LIMIT 1";
+      SELECT_VERSUCHE + " AND " + VEROEFFENTLICHUNG + JUENGSTER_ORDNUNG;
 
   private static final String SELECT_JUENGSTER =
       "SELECT revision, url, finished_at, created_at FROM deployment_attempt"
           + " WHERE project_id = :projectId AND ";
-
-  private static final String JUENGSTER_ORDNUNG = " ORDER BY finished_at DESC, id DESC LIMIT 1";
 
   private static final String SELECT_JUENGSTE_VORSCHAU =
       SELECT_JUENGSTER + "art = 'vorschau'" + JUENGSTER_ORDNUNG;
@@ -112,7 +115,7 @@ class JdbcDeploymentStore implements DeploymentStore {
   private static final RowMapper<GemeldeterStand> STAND =
       (rs, n) ->
           new GemeldeterStand(
-              rs.getString("revision"),
+              rs.getString(P_REVISION),
               rs.getString("url"),
               zeitpunkt(rs, "finished_at"),
               zeitpunkt(rs, "created_at"));
@@ -134,7 +137,7 @@ class JdbcDeploymentStore implements DeploymentStore {
                     .addValue("attemptId", meldung.attemptId())
                     .addValue("outcome", meldung.outcome().name())
                     .addValue("finishedAt", zeitpunkt(meldung.finishedAt()))
-                    .addValue("revision", meldung.revision())
+                    .addValue(P_REVISION, meldung.revision())
                     .addValue("tokenName", tokenName)
                     .addValue("createdAt", zeitpunkt(eingang))
                     .addValue(P_ART, wert(meldung.art()))
@@ -223,7 +226,7 @@ class JdbcDeploymentStore implements DeploymentStore {
         rs.getString("attempt_id"),
         Ausgang.valueOf(rs.getString("outcome")),
         zeitpunkt(rs, "finished_at"),
-        rs.getString("revision"),
+        rs.getString(P_REVISION),
         art(rs.getString(P_ART)));
   }
 

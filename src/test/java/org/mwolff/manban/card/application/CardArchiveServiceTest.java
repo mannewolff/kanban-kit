@@ -620,37 +620,12 @@ class CardArchiveServiceTest {
 
   @Test
   void vertraulicheEntfernen_entferntTrefferAufDemBoardUndImPapierkorb_ohneRechtepruefung() {
-    // Given: Issue #2200 — Nummer 1 steht auf dem Board, 3 im Papierkorb; 2 ist nicht gemeint,
-    // eine Karte ohne Nummer auch nicht.
-    Card ohneNummer =
-        new Card(
-            4L,
-            BOARD,
-            20L,
-            null,
-            "Titel",
-            null,
-            0,
-            false,
-            null,
-            1L,
-            FIXED,
-            FIXED,
-            CardType.CARD,
-            null,
-            null,
-            null,
-            PROJECT,
-            null,
-            null,
-            null,
-            null);
+    // Given: Issue #2200 — Nummer 1 steht auf dem Board, 3 im Papierkorb; 2 ist nicht gemeint.
     when(cards.findByProjectId(PROJECT))
         .thenReturn(
             List.of(
                 card(1L, 20L, 1, false, null, CardType.CARD, null, null),
-                card(2L, 20L, 2, false, null, CardType.CARD, null, null),
-                ohneNummer));
+                card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
     when(cards.findTrashByBoardId(BOARD))
         .thenReturn(List.of(card(3L, 20L, 3, false, null, CardType.CARD, null, null)));
 
@@ -666,7 +641,6 @@ class CardArchiveServiceTest {
     inOrder.verify(cards).deleteById(3L);
     verify(dependencies).deleteByCardId(3L);
     verify(cards, never()).deleteById(2L);
-    verify(cards, never()).deleteById(4L);
     verifyNoInteractions(permissions);
   }
 

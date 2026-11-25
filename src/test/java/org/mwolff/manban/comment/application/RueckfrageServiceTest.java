@@ -42,6 +42,9 @@ import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.domain.Permission;
 
 /** Rückfragen lesen und beantworten (Issue #2210, Plan #2206 E8, E9, E11). */
+// PMD.TooManyMethods: je Szenario und je Abwehr ein Test über denselben Aufbau der Karte; mit der
+// Bindung der Antwort an die Fassung der Rückfrage (Issue #2262) liegt die Suite über der Schwelle.
+@SuppressWarnings("PMD.TooManyMethods")
 class RueckfrageServiceTest {
 
   private static final long USER = 3L;
@@ -588,5 +591,42 @@ class RueckfrageServiceTest {
     // When / Then
     assertThat(service.staendeJeKarte(USER, PROJECT, List.of())).isEmpty();
     verify(comments, never()).listJeKarte(anyLong(), anyLong(), anyCollection());
+  }
+
+  @Test
+  void eineVorDerAenderungDerRueckfrageGegebeneAntwortZaehltNicht() {
+    // Angenommen der Mensch hat alles übernommen, danach hat die KI ihre Rückfrage bearbeitet
+    Instant bearbeitet = SPAETER.plusSeconds(60);
+    ankarte.add(
+        new CommentView(
+            RUECKFRAGE_ID,
+            CARD,
+            USER,
+            "Ada",
+            "## Rückfrage\n" + DREI_FRAGEN,
+            FRAGE_AM,
+            bearbeitet,
+            "TOKEN",
+            "kit",
+            null,
+            "STANDARD",
+            true));
+    ankarte.add(
+        kommentar(
+            101L,
+            new Antwort(RUECKFRAGE_ID, true, List.of(), null, null)
+                .alsKommentar(Kopfsprache.DEUTSCH),
+            SPAETER,
+            null,
+            false));
+
+    // Wenn die Rückfragen der Karte gelesen werden
+    List<RueckfrageView> staende = service.liste(USER, CARD);
+
+    // Dann ist die geänderte Fassung wieder offen (Issue #2262)
+    assertThat(staende)
+        .singleElement()
+        .extracting(RueckfrageView::zustand)
+        .isEqualTo(RueckfrageZustand.OFFEN);
   }
 }

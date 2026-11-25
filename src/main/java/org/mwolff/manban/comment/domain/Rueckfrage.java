@@ -19,6 +19,8 @@ import org.mwolff.manban.common.KitMeldungen;
  *
  * @param kommentarId Kennung des Kommentars; auf sie verweist die Antwort
  * @param angelegtAm wann der Kommentar angelegt wurde
+ * @param geaendertAm wann der Kommentar zuletzt geändert wurde; ohne Änderung der Zeitpunkt der
+ *     Anlage. Eine Antwort gilt nur für die Fassung, die zu ihrer Zeit stand (Issue #2262)
  * @param sprache Sprache des Kopfs; die Antwort folgt ihr
  * @param vorschau Adresse der Vorschau einer Freigabe-Rückfrage; sonst {@code null}
  * @param commit Stand, den eine Freigabe-Rückfrage zur Freigabe stellt; sonst {@code null}
@@ -27,6 +29,7 @@ import org.mwolff.manban.common.KitMeldungen;
 public record Rueckfrage(
     long kommentarId,
     Instant angelegtAm,
+    Instant geaendertAm,
     Kopfsprache sprache,
     @Nullable String vorschau,
     @Nullable String commit,
@@ -103,13 +106,19 @@ public record Rueckfrage(
     return eintraege.stream().filter(e -> e.nr() == nr).findFirst();
   }
 
+  /** Liest die Rückfrage aus einem Kommentar, der seit seiner Anlage nicht geändert wurde. */
+  public static Optional<Rueckfrage> lies(long kommentarId, Instant angelegtAm, String text) {
+    return lies(kommentarId, angelegtAm, angelegtAm, text);
+  }
+
   /**
    * Liest die Rückfrage aus dem Text eines Kommentars. Leer, wenn die erste nichtleere Zeile nicht
    * der Kopf ist, der Block fehlt, kein gültiges JSON-Feld trägt oder keinen lesbaren Eintrag hat.
    * Einträge ohne ganzzahlige Nummer, mit unbekannter Art oder mit schon vergebener Nummer fallen
    * weg.
    */
-  public static Optional<Rueckfrage> lies(long kommentarId, Instant angelegtAm, String text) {
+  public static Optional<Rueckfrage> lies(
+      long kommentarId, Instant angelegtAm, Instant geaendertAm, String text) {
     List<String> zeilen = text.lines().toList();
     int kopf = 0;
     while (kopf < zeilen.size() && zeilen.get(kopf).isBlank()) {
@@ -137,6 +146,7 @@ public record Rueckfrage(
         new Rueckfrage(
             kommentarId,
             angelegtAm,
+            geaendertAm,
             sprache.get(),
             wert(davor, KitMeldungen.Zeile.VORSCHAU),
             wert(davor, KitMeldungen.Zeile.COMMIT),

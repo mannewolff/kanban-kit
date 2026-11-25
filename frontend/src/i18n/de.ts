@@ -2305,6 +2305,13 @@ export const de = {
         setzt: 'Der Nacht-Runner, wenn er die Reparaturkarte anlegt.',
         verschwindet: 'Mit der Karte; der Runner sucht offene Reparaturkarten an diesem Label.',
       },
+      REVIEW_BEFUND: {
+        bedeutung:
+          'Die Karte stammt aus einem wichtigen Fund des Code-Reviews; der Runner setzt sie am Ende eines vom Menschen gestarteten Laufs ohne eigenes GO um.',
+        setzt: 'Das Kit, wenn es die Karte aus dem Fund anlegt.',
+        verschwindet:
+          'Gar nicht von selbst: Es bleibt als Kennzeichen an der Karte, auch in Done; abnehmen kann jeder mit Schreibrecht.',
+      },
       HOTFIX: {
         bedeutung: 'Die Karte gehört zu einem Hotfix, der noch nicht nachgeholt ist.',
         setzt: 'Der Session-Start beziehungsweise „push main“.',

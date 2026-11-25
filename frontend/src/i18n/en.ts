@@ -2165,6 +2165,13 @@ export const en: Woerterbuch = {
         setzt: 'The night runner, when it creates the repair card.',
         verschwindet: 'With the card; the runner looks up open repair cards by this label.',
       },
+      REVIEW_BEFUND: {
+        bedeutung:
+          'The card comes from an important finding of the code review; the runner implements it without its own GO at the end of a run started by a human.',
+        setzt: 'The kit, when it creates the card from the finding.',
+        verschwindet:
+          'Not on its own: it stays on the card as a marker, even in Done; anyone with write access can remove it.',
+      },
       HOTFIX: {
         bedeutung: 'The card belongs to a hotfix that has not been caught up yet.',
         setzt: 'The session start or “push main”.',

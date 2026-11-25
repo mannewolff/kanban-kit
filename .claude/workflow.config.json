@@ -117,11 +117,6 @@
   "mainBranch": "main",
   "productionBranch": "production",
   "reviewScope": "diff",
-  "triggers": {
-    "go": "GO",
-    "push": "push main",
-    "merge": "merge production"
-  },
   "local": {
     "issuesDir": "issues"
   },
@@ -166,34 +161,22 @@
   },
   "reviewStages": {
     "requirement": {
-      "reviewer": 2,
-      "roles": [
-        "form-beobachtbarkeit",
-        "abgrenzung"
-      ]
+      "reviewer": 2
     },
     "plan": {
-      "reviewer": 1,
-      "roles": [
-        "architektur-bestand"
-      ]
+      "reviewer": 1
     },
     "issue": {
-      "reviewer": 1,
-      "roles": [
-        "pruefbarkeit"
-      ]
+      "reviewer": 1
     }
   },
   "night": {
     "chain": {
-      "label": "kit:night",
       "planMin": 60,
       "packagesMin": 60,
       "reviewMin": 60,
       "coverageMin": 10,
-      "costUsd": 50,
-      "correctionRounds": 2
+      "costUsd": 50
     },
     "model": "claude-opus-5-5",
     "models": [
@@ -269,9 +252,6 @@
   },
   "scenariosFrom": 1638,
   "strictness": "normal",
-  "checkLimits": {
-    "silenceMin": 40
-  },
   "pacer": {
     "enabled": true,
     "machine": "manne",

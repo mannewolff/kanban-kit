@@ -58,6 +58,10 @@ public final class KitNamen {
     NIGHTISSUES(Schutz.KEINER),
     WARTET_EREIGNIS(Schutz.NUR_MENSCH_NIMMT_AB),
     REPARATUR(Schutz.KEINER),
+    /**
+     * Karte aus einem wichtigen Fund des Code-Reviews je Karte; das Kit setzt es (Kit-Issue #2539).
+     */
+    REVIEW_BEFUND(Schutz.KEINER),
     HOTFIX(Schutz.KEINER),
     MANUELL(Schutz.NUR_MENSCH),
     /** Die Karte steht beim Anbieter in Arbeit; das Rechenzentrum setzt und nimmt ab (#2208). */
@@ -131,6 +135,7 @@ public final class KitNamen {
               new Eintrag(Sache.WARTET_EREIGNIS, "kit:wartet"),
               new Eintrag(Sache.WARTET_EREIGNIS, "kit:on-hold"),
               new Eintrag(Sache.REPARATUR, "kit:repair"),
+              new Eintrag(Sache.REVIEW_BEFUND, "kit:review-finding"),
               new Eintrag(Sache.HOTFIX, "kit:hotfix"),
               new Eintrag(Sache.MANUELL, "kit:manuell"),
               new Eintrag(Sache.MANUELL, "kit:manual"),

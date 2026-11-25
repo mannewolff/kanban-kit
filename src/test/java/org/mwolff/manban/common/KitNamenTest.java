@@ -37,6 +37,7 @@ class KitNamenTest {
           new Zeile(Sache.NIGHTISSUES, "kit:nightissues", null, Schutz.KEINER),
           new Zeile(Sache.WARTET_EREIGNIS, "kit:wartet", "kit:on-hold", Schutz.NUR_MENSCH_NIMMT_AB),
           new Zeile(Sache.REPARATUR, "kit:repair", null, Schutz.KEINER),
+          new Zeile(Sache.REVIEW_BEFUND, "kit:review-finding", null, Schutz.KEINER),
           new Zeile(Sache.HOTFIX, "kit:hotfix", null, Schutz.KEINER),
           new Zeile(Sache.MANUELL, "kit:manuell", "kit:manual", Schutz.NUR_MENSCH),
           new Zeile(Sache.ANBIETER, "kit:provider", null, Schutz.KEINER),
@@ -84,8 +85,8 @@ class KitNamenTest {
   }
 
   @Test
-  void standard_hatSiebenundzwanzigSachen() {
-    assertThat(Sache.values()).hasSize(27);
+  void standard_hatAchtundzwanzigSachen() {
+    assertThat(Sache.values()).hasSize(28);
   }
 
   @Test
@@ -142,6 +143,7 @@ class KitNamenTest {
             Sache.NIGHTREVIEW,
             Sache.NIGHTISSUES,
             Sache.REPARATUR,
+            Sache.REVIEW_BEFUND,
             Sache.HOTFIX,
             Sache.ANBIETER,
             Sache.FREIGABE,
@@ -173,6 +175,16 @@ class KitNamenTest {
   }
 
   @Test
+  void reviewBefund_loestAufSeineSacheAufUndTraegtKeinenSchutz() {
+    // Issue #2265, Kit-Issue #2539: Karte aus einem wichtigen Fund des Code-Reviews je Karte.
+    assertThat(KitNamen.STANDARD.sache("kit:review-finding"))
+        .isEqualTo(Optional.of(Sache.REVIEW_BEFUND));
+    assertThat(Sache.REVIEW_BEFUND.schutz()).isEqualTo(Schutz.KEINER);
+    List<String> namen = KitNamen.STANDARD.alleNamen();
+    assertThat(namen.indexOf("kit:review-finding")).isEqualTo(namen.indexOf("kit:repair") + 1);
+  }
+
+  @Test
   void namen_liefertLeereListe_fuerSacheOhneEintrag() {
     // Given: ein Register, das nur eine Sache kennt.
     KitNamen register = KitNamen.aus(List.of(new Eintrag(Sache.KLAEREN, "kit:klaeren")));
@@ -186,7 +198,7 @@ class KitNamenTest {
     assertThat(KitNamen.STANDARD.alleNamen())
         .containsExactlyElementsOf(
             KitNamen.STANDARD.eintraege().stream().map(Eintrag::name).toList())
-        .hasSize(42)
+        .hasSize(43)
         .startsWith("kit:durchziehen", "kit:carry-through", "kit:geschuetzt")
         .endsWith("planreview:1", "planreview:2");
   }

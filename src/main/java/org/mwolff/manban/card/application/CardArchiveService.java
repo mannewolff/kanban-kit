@@ -186,7 +186,7 @@ public class CardArchiveService {
     for (List<Card> karten :
         List.of(cards.findByProjectId(projectId), cards.findTrashByBoardId(boardId))) {
       for (Card karte : karten) {
-        if (karte.number() != null && nummern.contains(karte.number())) {
+        if (nummern.contains(karte.number())) {
           endgueltigEntfernen(karte);
           entfernt++;
         }

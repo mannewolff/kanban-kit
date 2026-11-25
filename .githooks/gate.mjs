@@ -310,7 +310,10 @@ async function commitMsg(nachrichtDatei) {
     strengeAb("configUnlesbar", { pfad: CONFIG_PFAD });
   }
   const { strengeVergleich, abschwaechungText, normalisiereConfig } = await ladeStrenge();
-  const { abschwaechungen } = strengeVergleich(normalisiereConfig(alt).config, normalisiereConfig(neu).config);
+  // Ohne Streichen (Plan #2593 E2, E5): Eine entfallene Uebersteuerung der Prueferzahl im alten Stand
+  // zaehlt, sonst saehe ihr Umzug nach reviewStages wie eine Absenkung aus.
+  const lies = (config) => normalisiereConfig(config, { streichen: false }).config;
+  const { abschwaechungen } = strengeVergleich(lies(alt), lies(neu));
   if (abschwaechungen.length === 0) return;
   const liste = abschwaechungen.map((a) => `  - ${abschwaechungText(a)}`).join("\n");
   const unbeaufsichtigt = typeof process.env.KIT_AGENT_MODEL === "string" && process.env.KIT_AGENT_MODEL.trim() !== "";
@@ -402,7 +405,7 @@ const ohneRepoBindung = (env) => Object.fromEntries(Object.entries(env).filter((
 function kartenpruefungAnstossen(hook) {
   const kitDir = kitVerzeichnis();
   if (!kitDir || !kartenpruefungInPro(kitDir) || !aufHauptzweigDerHauptkopie()) return;
-  const res = spawnSync(process.execPath, [join(kitDir, "night.mjs"), "--card-check", "--detach"], {
+  const res = spawnSync(process.execPath, [join(kitDir, "night.mjs"), "--card-check", "--detach", "--from-hook"], {
     cwd: process.cwd(), env: ohneRepoBindung(process.env), stdio: ["ignore", "inherit", "pipe"], encoding: "utf-8", timeout: 60_000,
   });
   if (!res.error && res.status === 0) {
