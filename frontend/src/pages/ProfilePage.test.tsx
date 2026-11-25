@@ -31,8 +31,17 @@ function Gate() {
   return <ProfilePage />
 }
 
-function renderProfile() {
-  return render(
+/**
+ * Wartet, bis `VorschauEintraege` ihren Ladeschritt gestartet hat. Ohne das endet ein Test vor dem
+ * Effekt; nach `vi.restoreAllMocks()` liefert der Mock dann `undefined`, und der beim Abbau
+ * nachgeholte Effekt wirft an `.then` (Issue #2270).
+ */
+async function vorschauEintraegeGeladen() {
+  await waitFor(() => expect(mockedApi.eigenesVorschauProtokoll).toHaveBeenCalled())
+}
+
+async function renderProfile({ mitVorschauEintraegen = true } = {}) {
+  const view = render(
     <MemoryRouter>
       <AuthProvider>
         <SnackbarProvider>
@@ -41,6 +50,8 @@ function renderProfile() {
       </AuthProvider>
     </MemoryRouter>,
   )
+  if (mitVorschauEintraegen) await vorschauEintraegeGeladen()
+  return view
 }
 
 const MEINE = '/api/me/benachrichtigungen'
@@ -95,7 +106,7 @@ describe('ProfilePage', () => {
     mockedApi.eigenesVorschauProtokoll.mockResolvedValue([])
   })
 
-  it('zeigt leere Felder, solange kein Nutzer geladen ist', () => {
+  it('zeigt leere Felder, solange kein Nutzer geladen ist', async () => {
     mockedApi.me.mockReturnValue(new Promise(() => {})) // bleibt pending → user null
     render(
       <MemoryRouter>
@@ -106,17 +117,25 @@ describe('ProfilePage', () => {
     )
     expect(screen.getByLabelText('Anzeigename')).toHaveValue('')
     expect(screen.getByLabelText('E-Mail')).toHaveValue('')
+    await vorschauEintraegeGeladen()
+  })
+
+  it('wirft beim Abbau nicht, wenn die Mocks vorher zurückgesetzt wurden (wie im CI-Lauf)', async () => {
+    const { unmount } = await renderProfile()
+    // Nachstellung des CI-Laufs: erst vi.restoreAllMocks(), dann der Abbau durch cleanup().
+    mockedApi.eigenesVorschauProtokoll.mockReturnValue(undefined)
+    expect(() => unmount()).not.toThrow()
   })
 
   it('lädt den aktuellen Anzeigenamen vorbefüllt', async () => {
-    renderProfile()
+    await renderProfile()
     expect(await screen.findByLabelText('Anzeigename')).toHaveValue('Alt')
     expect(screen.getByLabelText('E-Mail')).toHaveValue('a@b.de')
   })
 
   it('speichert einen neuen Anzeigenamen und zeigt Erfolg', async () => {
     mockedApi.updateProfile.mockResolvedValue({ ...alt, displayName: 'Neu' })
-    renderProfile()
+    await renderProfile()
     const input = await screen.findByLabelText('Anzeigename')
     await userEvent.clear(input)
     await userEvent.type(input, 'Neu')
@@ -128,7 +147,7 @@ describe('ProfilePage', () => {
 
   it('zeigt die Backend-Meldung bei fehlgeschlagenem Speichern', async () => {
     mockedApi.updateProfile.mockRejectedValue(new ApiError(400, 'Validierung fehlgeschlagen'))
-    renderProfile()
+    await renderProfile()
     const input = await screen.findByLabelText('Anzeigename')
     await userEvent.clear(input)
     await userEvent.type(input, 'X')
@@ -139,7 +158,7 @@ describe('ProfilePage', () => {
 
   it('zeigt eine generische Meldung bei unerwartetem Fehler', async () => {
     mockedApi.updateProfile.mockRejectedValue(new Error('boom'))
-    renderProfile()
+    await renderProfile()
     const input = await screen.findByLabelText('Anzeigename')
     await userEvent.clear(input)
     await userEvent.type(input, 'X')
@@ -156,8 +175,8 @@ describe('ProfilePage auf Englisch', () => {
     mockedApi.eigenesVorschauProtokoll.mockResolvedValue([])
   })
 
-  const renderEn = () =>
-    renderMitSprache(
+  const renderEn = async () => {
+    const view = renderMitSprache(
       <MemoryRouter>
         <AuthProvider>
           <SnackbarProvider>
@@ -167,10 +186,13 @@ describe('ProfilePage auf Englisch', () => {
       </MemoryRouter>,
       'en',
     )
+    await vorschauEintraegeGeladen()
+    return view
+  }
 
   it('beschriftet das Profil auf Englisch und bestätigt das Speichern', async () => {
     mockedApi.updateProfile.mockResolvedValue({ ...alt, displayName: 'Neu' })
-    renderEn()
+    await renderEn()
     expect(await screen.findByRole('heading', { name: 'Profile' })).toBeInTheDocument()
     expect(screen.getByLabelText('Email')).toHaveValue('a@b.de')
     const feld = screen.getByLabelText('Display name')
@@ -182,7 +204,7 @@ describe('ProfilePage auf Englisch', () => {
 
   it('meldet einen Fehlschlag ohne Server-Meldung auf Englisch', async () => {
     mockedApi.updateProfile.mockRejectedValue(new Error('netz'))
-    renderEn()
+    await renderEn()
     await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Saving failed.')).toBeInTheDocument()
   })
@@ -206,7 +228,7 @@ describe('ProfilePage: Ansicht als XY', () => {
         endgrund: 'BEENDET',
       },
     ])
-    renderProfile()
+    await renderProfile()
 
     expect(await screen.findByRole('heading', { name: 'Ansichten durch Admins' })).toBeInTheDocument()
     const eintrag = await screen.findByRole('listitem')
@@ -217,7 +239,7 @@ describe('ProfilePage: Ansicht als XY', () => {
 
   it('Szenario: Persönliches von XY bleibt verborgen', async () => {
     mockedApi.me.mockResolvedValue({ ...alt, displayName: 'Grace', email: 'grace@x.de', vorschau })
-    renderProfile()
+    await renderProfile({ mitVorschauEintraegen: false })
 
     expect(await screen.findByRole('note')).toHaveTextContent('Dieser Bereich wird in der Vorschau nicht gezeigt.')
     expect(screen.getByRole('heading', { name: 'Profil' })).toBeInTheDocument()
@@ -248,7 +270,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
 
   it('schreibt den Schalter je Projekt per PUT an das richtige Projekt', async () => {
     const fetchSpy = stubFetch(einstellungen([projekt(7, 'Alpha', true, false), projekt(8, 'Beta', true, false)]))
-    renderProfile()
+    await renderProfile()
 
     const schalter = await screen.findByRole('switch', { name: 'Beta' })
     await userEvent.click(schalter)
@@ -261,7 +283,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
 
   it('schaltet einen eingeschalteten Schalter aus', async () => {
     const fetchSpy = stubFetch(einstellungen([projekt(7, 'Alpha', true, true)]))
-    renderProfile()
+    await renderProfile()
 
     const schalter = await screen.findByRole('switch', { name: 'Alpha' })
     expect(schalter).toBeChecked()
@@ -276,7 +298,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
       ...einstellungen([projekt(7, 'Alpha', true, false), projekt(8, 'Beta', true, false)]),
       [`PUT ${MEINE}/projekte/8`]: { status: 404, body: { detail: 'Projekt nicht gefunden' } },
     })
-    renderProfile()
+    await renderProfile()
 
     const schalter = await screen.findByRole('switch', { name: 'Beta' })
     await userEvent.click(schalter)
@@ -288,7 +310,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
 
   it('zeigt bei ausgeschaltetem Projekt den Schalter mit einem Hinweis', async () => {
     stubFetch(einstellungen([projekt(7, 'Alpha', false, false)]))
-    renderProfile()
+    await renderProfile()
 
     const schalter = await screen.findByRole('switch', { name: 'Alpha' })
     expect(schalter).toBeEnabled()
@@ -299,7 +321,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
 
   it('zeigt bei eingeschaltetem Projekt keinen Hinweis', async () => {
     stubFetch(einstellungen([projekt(7, 'Alpha', true, false)]))
-    renderProfile()
+    await renderProfile()
 
     const schalter = await screen.findByRole('switch', { name: 'Alpha' })
     expect(schalter).not.toHaveAttribute('aria-describedby')
@@ -307,7 +329,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
   })
 
   it('sagt, wenn es kein schaltbares Projekt gibt', async () => {
-    renderProfile()
+    await renderProfile()
 
     expect(await screen.findByText('Es gibt kein Projekt, für das du Mails einschalten kannst.')).toBeInTheDocument()
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
@@ -315,7 +337,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
 
   it('zeigt eine Fehlermeldung, wenn die Einstellungen nicht geladen werden können', async () => {
     stubFetch({ [`GET ${MEINE}`]: { status: 500 } })
-    renderProfile()
+    await renderProfile()
 
     expect(await screen.findByText('Die Einstellungen ließen sich nicht laden.')).toBeInTheDocument()
     expect(screen.queryByLabelText('Zeitzone')).not.toBeInTheDocument()
@@ -331,7 +353,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
         antworte = resolve
       }),
     )
-    const { unmount } = renderProfile()
+    const { unmount } = await renderProfile()
     await screen.findByLabelText('Anzeigename')
 
     unmount()
@@ -348,7 +370,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
   })
 
   it('belegt die Zeitzone ohne gespeicherte Ruhezeit aus dem Browser vor', async () => {
-    renderProfile()
+    await renderProfile()
 
     expect(await screen.findByLabelText('Zeitzone')).toHaveValue(browserZone)
     expect(screen.getByLabelText('Beginn')).toHaveValue('')
@@ -358,7 +380,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
 
   it('gibt einer gespeicherten Zone Vorrang vor dem Browser', async () => {
     stubFetch(einstellungen([], gespeicherteRuhezeit))
-    renderProfile()
+    await renderProfile()
 
     expect(await screen.findByLabelText('Zeitzone')).toHaveValue('Asia/Tokyo')
     expect(screen.getByLabelText('Beginn')).toHaveValue('22:00')
@@ -367,7 +389,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
 
   it('speichert die Ruhezeit und bietet danach das Löschen an', async () => {
     const fetchSpy = stubFetch()
-    renderProfile()
+    await renderProfile()
 
     const zone = await screen.findByLabelText('Zeitzone')
     fireEvent.change(screen.getByLabelText('Beginn'), { target: { value: '22:30' } })
@@ -387,7 +409,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
     ['ohne Ende', '22:00', '', browserZone],
     ['ohne Zeitzone', '22:00', '07:00', '   '],
   ])('sperrt das Speichern %s', async (_fall, beginn, ende, zeitzone) => {
-    renderProfile()
+    await renderProfile()
 
     const zone = await screen.findByLabelText('Zeitzone')
     fireEvent.change(screen.getByLabelText('Beginn'), { target: { value: beginn } })
@@ -399,7 +421,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
 
   it('löscht die Ruhezeit und belegt die Felder wieder vor', async () => {
     const fetchSpy = stubFetch(einstellungen([], gespeicherteRuhezeit))
-    renderProfile()
+    await renderProfile()
 
     const zone = await screen.findByLabelText('Zeitzone')
     await userEvent.click(screen.getByRole('button', { name: 'Ruhezeit löschen' }))
@@ -417,7 +439,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
       ...einstellungen([], gespeicherteRuhezeit),
       [`PUT ${RUHEZEIT}`]: { status: 400, body: { detail: 'Beginn und Ende der Ruhezeit dürfen nicht gleich sein.' } },
     })
-    renderProfile()
+    await renderProfile()
 
     await screen.findByLabelText('Zeitzone')
     await userEvent.click(screen.getByRole('button', { name: 'Ruhezeit speichern' }))
@@ -428,7 +450,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
 
   it('nennt ohne Server-Meldung den allgemeinen Fehler und gibt die Knöpfe wieder frei', async () => {
     stubFetch({ ...einstellungen([], gespeicherteRuhezeit), [`PUT ${RUHEZEIT}`]: { status: 500 } })
-    renderProfile()
+    await renderProfile()
 
     await screen.findByLabelText('Zeitzone')
     const speichern = screen.getByRole('button', { name: 'Ruhezeit speichern' })
@@ -443,7 +465,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
       ...einstellungen([], gespeicherteRuhezeit),
       [`DELETE ${RUHEZEIT}`]: { status: 500, body: { detail: 'Löschen abgewiesen' } },
     })
-    renderProfile()
+    await renderProfile()
 
     const zone = await screen.findByLabelText('Zeitzone')
     await userEvent.click(screen.getByRole('button', { name: 'Ruhezeit löschen' }))
@@ -456,7 +478,7 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
   it('zeigt den Abschnitt in der Vorschau nicht und ruft die Einstellungen nicht ab', async () => {
     const fetchSpy = stubFetch()
     mockedApi.me.mockResolvedValue({ ...alt, vorschau })
-    renderProfile()
+    await renderProfile({ mitVorschauEintraegen: false })
 
     await screen.findByRole('note')
     expect(screen.queryByRole('heading', { name: 'Mail-Benachrichtigungen' })).not.toBeInTheDocument()
@@ -486,5 +508,6 @@ describe('ProfilePage: Mail-Benachrichtigungen', () => {
     expect(screen.getByLabelText('End')).toHaveValue('')
     expect(screen.getByLabelText('Time zone')).toHaveValue(browserZone)
     expect(screen.getByRole('button', { name: 'Save quiet hours' })).toBeDisabled()
+    await vorschauEintraegeGeladen()
   })
 })
