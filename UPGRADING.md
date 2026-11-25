@@ -27,6 +27,14 @@ Darunter steht je Version mit Handarbeit ein Abschnitt, **absteigend** nach Vers
 Versionen überspringt, arbeitet die betroffenen Abschnitte von unten nach oben ab — also von der
 ältesten zur neuesten.
 
+## Nach 3.21.0 — Anmeldecodes im Protokoll nur im Entwicklungsbetrieb
+
+Ist der Mailversand aus (`MANBAN_MAIL_ENABLED=false`), stehen Anmeldecode und Anmeldelink nur noch
+dann im Protokoll des Servers, wenn zusätzlich `MANBAN_DEV_MODE=true` gesetzt ist (Issue #2267).
+Sonst könnte jeder mit Lesezugriff auf das Protokoll sich an einem fremden Konto anmelden. Wer
+ohne Mailversand und ohne Entwicklungsbetrieb betreibt — etwa mit dem Betriebs-Overlay —, schaltet
+den Mailversand ein; ohne ihn kommt kein Anmeldecode mehr an.
+
 ## 3.3.0 — Anmeldung per Einmalcode statt Passwort
 
 Angemeldet wird nur noch per Einmalcode aus einer Mail; das Passwort entfällt ganz. Handarbeit

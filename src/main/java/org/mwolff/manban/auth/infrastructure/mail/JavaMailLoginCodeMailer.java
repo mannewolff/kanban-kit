@@ -17,6 +17,13 @@ import org.springframework.stereotype.Component;
  * Link im Protokoll — sonst käme niemand an seinen Code. Ist er an, steht dort nur, dass die Mail
  * hinausging, nie der Code.
  *
+ * <p><strong>Nur im Entwicklungsbetrieb (Issue #2267):</strong> Code und Link landen nur dann im
+ * Protokoll, wenn zusätzlich {@code manban.dev-mode=true} gesetzt ist. Sonst könnte jeder mit
+ * Lesezugriff auf die Protokolle sich ohne Zugriff auf das Postfach an einem fremden Konto
+ * anmelden. Ohne Entwicklungsbetrieb ist ein abgeschalteter Mailversand ein Konfigurationsfehler:
+ * Das Protokoll nennt nur die Adresse, und der Versuch scheitert, damit die Outbox ihn als
+ * Fehlversuch verbucht.
+ *
  * <p>Betreff und Text in der eingestellten Sprache, bestimmt beim Versand wie bei den übrigen Mails
  * (Issue #1643) — die Outbox-Payload trägt keine Sprache.
  */
@@ -27,6 +34,7 @@ class JavaMailLoginCodeMailer {
 
   private final JavaMailSender mailSender;
   private final boolean mailEnabled;
+  private final boolean devMode;
   private final String from;
   private final String productName;
   private final Texte texte;
@@ -34,11 +42,13 @@ class JavaMailLoginCodeMailer {
   JavaMailLoginCodeMailer(
       JavaMailSender mailSender,
       @Value("${manban.mail.enabled:false}") boolean mailEnabled,
+      @Value("${manban.dev-mode:false}") boolean devMode,
       @Value("${manban.mail.from:no-reply@kanban-kit.local}") String from,
       @Value("${manban.mail.product-name:kanban-kit}") String productName,
       Texte texte) {
     this.mailSender = mailSender;
     this.mailEnabled = mailEnabled;
+    this.devMode = devMode;
     this.from = from;
     this.productName = productName;
     this.texte = texte;
@@ -46,6 +56,15 @@ class JavaMailLoginCodeMailer {
 
   void sendLoginCode(String toEmail, String code, String linkUrl) {
     if (!mailEnabled) {
+      if (!devMode) {
+        log.error(
+            "Anmeldecode für {} nicht zugestellt: Mailversand ist aus und kein Entwicklungsbetrieb."
+                + " manban.mail.enabled=true setzen.",
+            toEmail);
+        throw new IllegalStateException(
+            "Mailversand ist aus (manban.mail.enabled=false) außerhalb des Entwicklungsbetriebs"
+                + " (manban.dev-mode=false): Anmeldecode nicht zugestellt.");
+      }
       log.info("[DEV] Anmeldecode für {}: {} — Link: {}", toEmail, code, linkUrl);
       return;
     }
