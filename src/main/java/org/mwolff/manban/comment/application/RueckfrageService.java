@@ -129,7 +129,7 @@ public class RueckfrageService {
 
   private static List<Rueckfrage> rueckfragen(List<CommentView> kommentare) {
     return kommentare.stream()
-        .flatMap(k -> Rueckfrage.lies(k.id(), k.createdAt(), k.body()).stream())
+        .flatMap(k -> Rueckfrage.lies(k.id(), k.createdAt(), k.updatedAt(), k.body()).stream())
         .toList();
   }
 

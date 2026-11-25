@@ -229,6 +229,7 @@
   "src/test/java/org/mwolff/manban/card/infrastructure/CardRepositoryExistingNumbersIT.java": ["src/main/java/org/mwolff/manban/card/infrastructure/persistence/CardRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/card/infrastructure/LabelPersistenceIT.java": ["src/main/java/org/mwolff/manban/card/infrastructure/persistence/LabelRepositoryAdapter.java", "src/main/java/org/mwolff/manban/card/infrastructure/persistence/JdbcCardLabelRepository.java"],
   "src/test/java/org/mwolff/manban/comment/CommentLaufstandIT.java": ["src/main/java/org/mwolff/manban/comment/application/CommentService.java"],
+  "src/test/java/org/mwolff/manban/comment/domain/RueckfrageFassungTest.java": ["src/main/java/org/mwolff/manban/comment/domain/RueckfragenAuswertung.java", "src/main/java/org/mwolff/manban/comment/domain/Rueckfrage.java"],
   "src/test/java/org/mwolff/manban/nightrun/NightRunNebenlaufIT.java": ["src/main/java/org/mwolff/manban/nightrun/application/NightRunService.java"],
   "src/test/java/org/mwolff/manban/nightrun/NightRunOverlapRepositoryIT.java": ["src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/project/infrastructure/ProjectDashboardParticipationIT.java": ["src/main/java/org/mwolff/manban/project/infrastructure/persistence/ProjectRepositoryAdapter.java"],

@@ -23,6 +23,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Adapter-Test für die Kommentar-Persistenz — insbesondere die zugesicherte chronologische
  * Reihenfolge von {@link CommentRepository#findByCardId} inklusive Tie-Break auf der ID (#472).
  */
+// PMD.TooManyMethods: je Abfrage und je Spalte ein Rundweg über denselben Aufbau der Datenbank; mit
+// dem Änderungszeitpunkt beim Bearbeiten (Issue #2262) liegt die Suite über der Schwelle.
+@SuppressWarnings("PMD.TooManyMethods")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class CommentRepositoryIT extends AbstractIntegrationTest {
 
@@ -326,6 +329,24 @@ class CommentRepositoryIT extends AbstractIntegrationTest {
                 Timestamp.class,
                 gespeichert.requireId()))
         .isEqualTo(Timestamp.from(T2));
+  }
+
+  @Test
+  void bearbeitenSetztDenAenderungszeitpunkt_aufDenAugenblickDerAenderung() {
+    // Issue #2262: Die Auswertung der Rückfragen bindet eine Antwort an die Fassung zu ihrer Zeit
+    // und liest dafür updated_at — der Trigger aus V1 setzt ihn bei jeder Änderung neu, auch wenn
+    // das Domänenobjekt den alten Zeitpunkt weiterreicht.
+    Comment angelegt = comments.save(kitKommentar(cardId, "## Rückfrage\nalt", T1));
+
+    comments.save(angelegt.withBody("## Rückfrage\nneu", null, "TOKEN", T2));
+
+    assertThat(comments.findById(angelegt.requireId()))
+        .get()
+        .satisfies(
+            c -> {
+              assertThat(c.createdAt()).isEqualTo(T1);
+              assertThat(c.updatedAt()).isAfter(T2);
+            });
   }
 
   @Test
