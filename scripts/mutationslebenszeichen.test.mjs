@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 import {
   LEBENSZEICHEN_MS,
@@ -47,13 +47,35 @@ test('Lebenszeichen: wirft das Werkzeug, endet der Begleiter trotzdem', () => {
   assert.equal(beendet, true);
 });
 
-test('Lebenszeichen: das Skript schreibt im Takt eine Zeile mit dem Werkzeug, ohne Fehlermerkmal', () => {
-  const res = spawnSync(process.execPath, ['-e', LEBENSZEICHEN_SKRIPT, '40', String(process.pid), 'mvn'], {
-    encoding: 'utf-8',
-    timeout: 400,
+/*
+ * Liest die Ausgabe, bis `anzahl` Zeilen da sind, und beendet den Prozess dann selbst. Eine feste
+ * Laufzeit wie frueher (400 ms) reichte im vollen Prueflauf nicht: Unter Last brauchte schon der
+ * Start von Node laenger, und die Ausgabe blieb leer (Issue #2269). Die Obergrenze faengt nur ein
+ * Skript ab, das gar nicht schreibt.
+ */
+function zeilenAbwarten(args, anzahl, obergrenzeMs) {
+  return new Promise((resolve) => {
+    const kind = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+    let ausgabe = '';
+    const ende = () => {
+      clearTimeout(frist);
+      kind.kill();
+      resolve(ausgabe);
+    };
+    const frist = setTimeout(ende, obergrenzeMs);
+    kind.stdout.setEncoding('utf-8');
+    kind.stdout.on('data', (stueck) => {
+      ausgabe += stueck;
+      if (ausgabe.split('\n').filter(Boolean).length >= anzahl) ende();
+    });
+    kind.on('exit', ende);
   });
-  const zeilen = res.stdout.trim().split('\n').filter(Boolean);
-  assert.ok(zeilen.length >= 2, `zu wenige Zeilen: ${JSON.stringify(res.stdout)}`);
+}
+
+test('Lebenszeichen: das Skript schreibt im Takt eine Zeile mit dem Werkzeug, ohne Fehlermerkmal', async () => {
+  const ausgabe = await zeilenAbwarten(['-e', LEBENSZEICHEN_SKRIPT, '40', String(process.pid), 'mvn'], 2, 10_000);
+  const zeilen = ausgabe.trim().split('\n').filter(Boolean);
+  assert.ok(zeilen.length >= 2, `zu wenige Zeilen: ${JSON.stringify(ausgabe)}`);
   for (const zeile of zeilen) {
     assert.match(zeile, /^Mutationswerkzeug mvn läuft noch/);
     assert.doesNotMatch(zeile, /\[ERROR\]|BUILD FAILURE/);
