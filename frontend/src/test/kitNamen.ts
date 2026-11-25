@@ -22,6 +22,7 @@ export const KIT_NAMEN: KitNamen = {
     { sache: 'NIGHTISSUES', namen: ['kit:nightissues'], schutz: 'KEINER' },
     { sache: 'WARTET_EREIGNIS', namen: ['kit:wartet', 'kit:on-hold'], schutz: 'NUR_MENSCH_NIMMT_AB' },
     { sache: 'REPARATUR', namen: ['kit:repair'], schutz: 'KEINER' },
+    { sache: 'REVIEW_BEFUND', namen: ['kit:review-finding'], schutz: 'KEINER' },
     { sache: 'HOTFIX', namen: ['kit:hotfix'], schutz: 'KEINER' },
     { sache: 'MANUELL', namen: ['kit:manuell', 'kit:manual'], schutz: 'NUR_MENSCH' },
     { sache: 'ANBIETER', namen: ['kit:provider'], schutz: 'KEINER' },

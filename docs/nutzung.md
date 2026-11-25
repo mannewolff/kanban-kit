@@ -1330,7 +1330,9 @@ mit dem festen Satz der Labels, die das claude-workflow-kit, die Laufsteuerung u
 - **Kit:** `kit:carry-through`, `kit:protected`, `kit:clarify`, `kit:clarified`, `kit:night`,
   `kit:nightrun`, `kit:check`, `kit:nightplan`, `kit:nightreview`, `kit:nightissues`,
   `kit:on-hold` (ein Fachplan wartet auf ein äußeres Ereignis; nur ein Mensch hebt das Warten auf),
-  `kit:repair` (Reparaturkarte der Kartenprüfung, gesetzt vom Runner), `kit:hotfix` (Karte eines
+  `kit:repair` (Reparaturkarte der Kartenprüfung, gesetzt vom Runner), `kit:review-finding` (Karte aus
+  einem wichtigen Fund des Code-Reviews je Karte, gesetzt vom Kit; der Runner setzt sie am Ende eines vom
+  Menschen gestarteten Laufs ohne eigenes GO um), `kit:hotfix` (Karte eines
   Hotfix, der noch nicht nachgeholt ist), `kit:manual` (Karte vom Taktgeber des Kits ausgenommen;
   setzt und nimmt nur ein Mensch ab), `kit:provider` (Karte steht beim Anbieter in Arbeit; setzt und
   nimmt das Rechenzentrum ab), `kit:approval` (eine Freigabe des Kunden steht aus; setzt und nimmt das

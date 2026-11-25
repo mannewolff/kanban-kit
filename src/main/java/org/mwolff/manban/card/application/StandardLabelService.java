@@ -153,6 +153,7 @@ public class StandardLabelService {
         Sache.NIGHTISSUES,
         Sache.WARTET_EREIGNIS,
         Sache.REPARATUR,
+        Sache.REVIEW_BEFUND,
         Sache.HOTFIX,
         Sache.MANUELL,
         Sache.ANBIETER,
