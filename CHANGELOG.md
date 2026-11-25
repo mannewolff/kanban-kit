@@ -17,6 +17,21 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.21.0] – 2026-11-25
+
+- chore: v3.20.1
+- Lebenszeichen-Test wartet auf Zeilen statt auf eine feste Frist ([#2269](https://github.com/mannewolff/kanban-kit/issues/2269))
+- Mutationstreiber gibt während Stryker/PIT ein Lebenszeichen aus ([#2263](https://github.com/mannewolff/kanban-kit/issues/2263))
+- kit:review-finding in den Standardsatz der Labels ([#2265](https://github.com/mannewolff/kanban-kit/issues/2265))
+- Antwort gilt nur der Fassung der Rückfrage zu ihrer Zeit ([#2262](https://github.com/mannewolff/kanban-kit/issues/2262))
+- Änderungen aus install.mjs 6.3.3
+- Überflüssige Null-Prüfung der Kartennummer in vertraulicheEntfernen ([#2259](https://github.com/mannewolff/kanban-kit/issues/2259))
+- Meldungsargumente der UngueltigeAntwortException als Serializable[] ([#2258](https://github.com/mannewolff/kanban-kit/issues/2258))
+- Konstante P_REVISION statt dreifachem Literal "revision" ([#2257](https://github.com/mannewolff/kanban-kit/issues/2257))
+- Konstante JUENGSTER_ORDNUNG in SELECT_LETZTER nutzen ([#2256](https://github.com/mannewolff/kanban-kit/issues/2256))
+- Mutations-Überlebende in useProjectRole.ts beseitigen ([#2260](https://github.com/mannewolff/kanban-kit/issues/2260))
+- Änderungen durch install.mjs 6.3.0
+
 ## [3.20.0] – 2026-11-23
 
 - chore: v3.19.3
