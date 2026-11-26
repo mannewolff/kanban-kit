@@ -948,7 +948,11 @@ export const en: Woerterbuch = {
     WOCHE_ARIA: (kw, vorher, endzustand) =>
       `CW ${kw}: before the code analysis ${vorher}, final state ${endzustand} findings per 1,000 lines`,
     WOCHE_LUECKE_ARIA: (kw) => `CW ${kw}: no counting measurement`,
+    WOCHE_OHNE_DICHTE_ARIA: (kw) => `CW ${kw}: no density (0 lines)`,
     WOCHEN_ARIA: (wochen) => `Finding density per calendar week — ${wochen}`,
+    WOCHE_TITEL: (kw) => `CW ${kw}`,
+    JUENGSTE_WOCHE: (kw) => `Latest week with counting measurements: CW ${kw}`,
+    ART: 'Type',
     GRUENDE: {
       'no-measurement': 'no code analysis measurement',
       'missing-before': 'verdict before the code analysis missing',

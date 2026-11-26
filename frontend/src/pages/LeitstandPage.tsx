@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { cardsApi, type CardByNumber } from '../api/cards'
 import { ApiError } from '../api/client'
-import { type AgingWip, type BoardDashboardKpis, type BoardFlow, type DeliveryView, type EpicForecast } from '../api/dashboard'
+import { type AgingWip, type BoardDashboardKpis, type BoardFlow, type CodeAnalysisView, type DeliveryView, type EpicForecast } from '../api/dashboard'
 import { type Epic } from '../api/epics'
 import type { VorhabenKostenView } from '../api/vorhabenKosten'
 import { type NightRunErrorClassCounts, type NightRunItemView, type NightRunModels, type NightRunRework, type NightRunView } from '../api/nightRuns'
@@ -14,6 +14,7 @@ import { CardDetailModal } from '../components/CardDetailModal'
 import { Erklaerung } from '../components/Erklaerung'
 import { AlterInArbeitPlatte } from '../components/leitstand/AlterInArbeitPlatte'
 import { AuslieferungPlatte } from '../components/leitstand/AuslieferungPlatte'
+import { CodeanalysePlatte } from '../components/leitstand/CodeanalysePlatte'
 import { FestgefahrenAngaben } from '../components/leitstand/FestgefahrenAngaben'
 import { GleichzeitigkeitMarken } from '../components/leitstand/GleichzeitigkeitMarken'
 import { FlussPlatte } from '../components/leitstand/FlussPlatte'
@@ -94,7 +95,7 @@ import {
  * Kennzahlen-Ansicht: Laufband des jüngsten Laufs, vier Kennzahl-Kacheln, Verbrauch mit
  * Zeitraum-Wahl und der Rumpf aus „Letzter Lauf", „Durchsatz", „Implementierungszeit",
  * „Abbruchgründe", „Nacharbeit", „Modelle" und „Vorhaben"; darunter in voller Breite „Fluss", „Alter in
- * Arbeit" (Issue #1778) und „Auslieferung" (Issue #1836).
+ * Arbeit" (Issue #1778), „Auslieferung" (Issue #1836) und „Codeanalyse" (Issue #2280).
  * Die Platte „Liegengeblieben" des Entwurfs entfällt (Manne, 2026-09-17, #983) — die Kennzahl
  * `outliers` bleibt im Backend, wird hier aber nicht mehr dargestellt.
  *
@@ -102,7 +103,8 @@ import {
  * Fehlerklassen und Verbrauch; dazu die Implementierungszeit je Zeitraum aus dem Abruf
  * `/dashboard/implementation-time` (Issue #1540, #1541); die Platte „Vorhaben“ allein aus der Prognose
  * `/dashboard/epic-forecast` (Issue #1829); die Platte „Auslieferung“ aus `/dashboard/delivery` mit den
- * Daten des ganzen Projekts (Issue #1836). Die Verweildauer je Spalte gehört nicht
+ * Daten des ganzen Projekts (Issue #1836); die Platte „Codeanalyse“ aus `/dashboard/code-analysis`, ebenfalls
+ * mit den Daten des ganzen Projekts (Issue #2280). Die Verweildauer je Spalte gehört nicht
  * in den Leitstand (Manne, 2026-09-16).
  *
  * **Die Läufe sieht nur, wer sie auch auf der Nachtlauf-Seite sieht** (Owner-Recht im Backend).
@@ -129,7 +131,7 @@ export function LeitstandPage() {
     return <Alert severity="error">{t.UNGUELTIGE_ID}</Alert>
   }
 
-  const { board, kpis, fluss, alter, prognose, kosten, auslieferung, klassen, nacharbeit, modelle, projectId, liste, juengster, laeufeVerborgen, epicListe } = daten
+  const { board, kpis, fluss, alter, prognose, kosten, auslieferung, codeanalyse, klassen, nacharbeit, modelle, projectId, liste, juengster, laeufeVerborgen, epicListe } = daten
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -171,7 +173,7 @@ export function LeitstandPage() {
         onDetail={setDetail}
       />
 
-      <FlussBereich fluss={fluss} alter={alter} auslieferung={auslieferung} projectId={projectId} onDetail={setDetail} />
+      <FlussBereich fluss={fluss} alter={alter} auslieferung={auslieferung} codeanalyse={codeanalyse} projectId={projectId} onDetail={setDetail} />
 
       {detail && (
         <CardDetailModal card={detail.card} canEdit={false} projectId={detail.projectId} onClose={() => setDetail(null)} />
@@ -279,18 +281,20 @@ function LeitstandRumpf({
 /**
  * Der Abschnitt unter dem Rumpf (Issue #1778, Plan #1765 E15): „Fluss“, darunter „Alter in Arbeit“ und
  * „Auslieferung“ (Issue #1836, Plan #1831 E15), alle in voller Seitenbreite und wie „Durchsatz“ für
- * alle, die das Board sehen dürfen. Fällt ein Abruf aus, fehlt nur seine Platte. Die Kartennummer öffnet die Karte wie in „Letzter Run“ (E18).
+ * alle, die das Board sehen dürfen; als letzte „Codeanalyse“ (Issue #2280, Plan #2272 E15). Fällt ein Abruf aus, fehlt nur seine Platte. Die Kartennummer öffnet die Karte wie in „Letzter Run“ (E18).
  */
 function FlussBereich({
   fluss,
   alter,
   auslieferung,
+  codeanalyse,
   projectId,
   onDetail,
 }: Readonly<{
   fluss: Laden<BoardFlow>
   alter: Laden<AgingWip>
   auslieferung: Laden<DeliveryView>
+  codeanalyse: Laden<CodeAnalysisView>
   projectId: number | null
   onDetail: (auswahl: Auswahl) => void
 }>) {
@@ -302,6 +306,7 @@ function FlussBereich({
         <AlterInArbeitPlatte daten={alter.wert} onOeffnen={(nummer) => void oeffnen(projectId, nummer)} />
       )}
       {auslieferung.art === 'da' && <AuslieferungPlatte daten={auslieferung.wert} />}
+      {codeanalyse.art === 'da' && <CodeanalysePlatte daten={codeanalyse.wert} />}
     </Box>
   )
 }

@@ -1012,7 +1012,11 @@ export const de = {
     WOCHE_ARIA: (kw: number, vorher: string, endzustand: string) =>
       `KW ${kw}: vor der Codeanalyse ${vorher}, Endzustand ${endzustand} Funde je 1.000 Zeilen`,
     WOCHE_LUECKE_ARIA: (kw: number) => `KW ${kw}: keine zählende Messung`,
+    WOCHE_OHNE_DICHTE_ARIA: (kw: number) => `KW ${kw}: keine Dichte (0 Zeilen)`,
     WOCHEN_ARIA: (wochen: string) => `Befunddichte je Kalenderwoche — ${wochen}`,
+    WOCHE_TITEL: (kw: number) => `KW ${kw}`,
+    JUENGSTE_WOCHE: (kw: number) => `Jüngste Woche mit zählenden Messungen: KW ${kw}`,
+    ART: 'Art',
     GRUENDE: {
       'no-measurement': 'keine Messung der Codeanalyse',
       'missing-before': 'Urteil vor der Codeanalyse fehlt',

@@ -1139,6 +1139,38 @@ describe('LeitstandPage — Auslieferung (Issue #1836)', () => {
   })
 })
 
+describe('LeitstandPage — Codeanalyse (Issue #2280)', () => {
+  it('stellt „Codeanalyse“ als letzte Platte nach „Auslieferung“ in den Abschnitt voller Breite (E15)', async () => {
+    renderPage()
+    const platte = await screen.findByRole('region', { name: 'Codeanalyse' })
+    const auslieferungPlatte = await screen.findByRole('region', { name: 'Auslieferung' })
+    expect(m.codeanalyse).toHaveBeenCalledWith(1)
+    expect(auslieferungPlatte.compareDocumentPosition(platte) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const bereich = screen.getByTestId('leitstand-fluss')
+    expect(bereich).toContainElement(platte)
+    // Als letzte Platte: Der letzte Bereich des Abschnitts liegt in ihr.
+    expect(platte).toContainElement(within(bereich).getAllByRole('region').at(-1)!)
+    expect(within(platte).getByTestId('codeanalyse-leer')).toHaveTextContent('noch keine Messung')
+    // Die bisherigen Platten bleiben an ihrem Platz (AK 10).
+    expect(screen.getByRole('region', { name: 'Fluss' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Alter in Arbeit' })).toBeInTheDocument()
+    expect(within(auslieferungPlatte).getAllByRole('article')).toHaveLength(4)
+    expect(screen.getByRole('region', { name: 'Durchsatz' })).toBeInTheDocument()
+  })
+
+  it.each([
+    ['einem Fehler', new ApiError(500, 'Kaputt')],
+    ['403', new ApiError(403, 'Forbidden')],
+  ])('lässt die Platte bei %s still weg und die übrigen stehen', async (_name, fehler) => {
+    m.codeanalyse.mockRejectedValue(fehler)
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Auslieferung' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Fluss' })).toBeInTheDocument()
+    await waitFor(() => expect(m.codeanalyse).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Codeanalyse' })).not.toBeInTheDocument()
+  })
+})
+
 describe('LeitstandPage — Diagrammbalken auf dem Tablet im Querformat (Plan #1707, E7)', () => {
   beforeEach(() => {
     m.kpis.mockResolvedValue(
