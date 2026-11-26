@@ -131,7 +131,8 @@ class SchreibsperreIT extends AbstractIntegrationTest {
   /**
    * Bleiben bei fremdem Board offen: Durchläufe und Kosten (sonst gibt es keine Laufdaten), der
    * Anstoß des Abgleichs und das Einrichten der Verbindung (Issue #2164). Dazu die Meldung der
-   * Auslieferungen, die wie die Durchläufe den Leitstand speist, und zwei Wege, die kein Board
+   * Auslieferungen und die der Messungen der Codeanalyse (Issue #2277, Plan #2272 E14), die wie die
+   * Durchläufe den Leitstand speisen und keine Karte ändern, und zwei Wege, die kein Board
    * beschreiben: das eigene Push-Abo eines Menschen für ein Board und das Anlegen der
    * Standard-Labels durch den Plattform-Admin, das Projekte mit fremdem Board überspringt (Issue
    * #2161).
@@ -142,6 +143,7 @@ class SchreibsperreIT extends AbstractIntegrationTest {
           Pattern.compile("POST /api/kanban/fremdboard/anstoss"),
           Pattern.compile("PUT /api/projects/\\{id}/fremdboard"),
           Pattern.compile("POST /api/kanban/deployments"),
+          Pattern.compile("POST /api/kanban/code-analysis-measurements"),
           Pattern.compile("PUT /api/push/boards/\\{boardId}"),
           Pattern.compile("POST /api/admin/standard-labels/anlegen"));
 

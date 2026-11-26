@@ -30,8 +30,8 @@ import org.mwolff.manban.common.KitNamen;
  * PortWhitelistArchitectureTest}.
  */
 // PMD.TooManyMethods: Je Regel ein Test, damit ein Verstoß beim Fehlschlag seine Regel nennt. Issue
-// #1834 bringt die Regel des Moduls deployment dazu und reißt damit die Schwelle; Regeln werden
-// nicht zusammengelegt, um eine Zahl zu drücken.
+// #1834 bringt die Regel des Moduls deployment dazu und reißt damit die Schwelle, Plan #2272 die
+// des Moduls codeanalyse; Regeln werden nicht zusammengelegt, um eine Zahl zu drücken.
 @SuppressWarnings("PMD.TooManyMethods")
 class ArchitectureTest {
 
@@ -175,6 +175,22 @@ class ArchitectureTest {
           .as(
               "deployment.application und deployment.domain duerfen das accesstoken-Modul nicht"
                   + " kennen (die Kante bleibt auf deployment.web begrenzt)");
+
+  // Der Meldeweg der Codeanalyse (Issue #2277, Plan #2272 E13) liest den KanbanPrincipal wie die
+  // Melde-Schnittstelle der Auslieferungen. Auch diese Kante bleibt auf codeanalyse.web begrenzt:
+  // Der Dienst nimmt Inhaber, Projekt und Token-Namen als primitive Werte.
+  static final ArchRule CODEANALYSE_APPLICATION_UND_DOMAIN_HAENGEN_NICHT_VON_ACCESSTOKEN_AB =
+      noClasses()
+          .that()
+          .resideInAnyPackage(
+              "org.mwolff.manban.codeanalyse.application..",
+              "org.mwolff.manban.codeanalyse.domain..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.accesstoken..")
+          .as(
+              "codeanalyse.application und codeanalyse.domain duerfen das accesstoken-Modul nicht"
+                  + " kennen (die Kante bleibt auf codeanalyse.web begrenzt)");
 
   // Die Anlaeufe einer Karte (Issue #967) liest der Endpunkt im Modul nightrun, nicht in card.
   // Die Regel schuetzt keine Kante, die #967 anlegt, sondern die des verworfenen Alternativdesigns:
@@ -666,6 +682,11 @@ class ArchitectureTest {
   @Test
   void deploymentApplicationUndDomainHaengenNichtVonAccesstokenAb() {
     DEPLOYMENT_APPLICATION_UND_DOMAIN_HAENGEN_NICHT_VON_ACCESSTOKEN_AB.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void codeanalyseApplicationUndDomainHaengenNichtVonAccesstokenAb() {
+    CODEANALYSE_APPLICATION_UND_DOMAIN_HAENGEN_NICHT_VON_ACCESSTOKEN_AB.check(PRODUKTIONSKLASSEN);
   }
 
   @Test
