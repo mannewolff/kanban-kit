@@ -1,0 +1,88 @@
+import type { CodeAnalysisWeek } from '../api/dashboard'
+import { formatierer } from '../i18n/format'
+import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
+
+/**
+ * Kopf, Formate und Texte der Platte „Codeanalyse“ (Issue #2278, Plan #2272 E7, E9, E11).
+ * Gerechnet wird im Backend; hier wird nur formatiert.
+ */
+
+/**
+ * Das Datum in UTC, nicht in der Zone des Lesers (E11): Die Wochen der Platte beginnen Montag
+ * 00:00 UTC, ein Datum in Ortszeit läge daneben einen Tag daneben. Die Schreibweise folgt
+ * `formatierer().datum`.
+ */
+const DATUM_UTC: Readonly<Record<Sprache, Intl.DateTimeFormatOptions>> = {
+  de: { day: 'numeric', month: 'numeric', year: 'numeric', timeZone: 'UTC' },
+  en: { dateStyle: 'medium', timeZone: 'UTC' },
+}
+
+function datumUtc(zeitpunkt: string, sprache: Sprache): string {
+  return new Intl.DateTimeFormat(formatierer(sprache).gebietsschema, DATUM_UTC[sprache]).format(new Date(zeitpunkt))
+}
+
+/**
+ * Der Kopftext: „Kalenderwochen, letzte 12 Wochen“ oder, wenn die erste Messung im Fenster liegt,
+ * „Kalenderwochen, seit ‹Datum›“ mit dem Datum in UTC.
+ */
+export function codeanalyseKopf(dataSince: string | null, sprache: Sprache): string {
+  const t = woerterbuch(sprache).LEITSTAND_CODEANALYSE
+  return t.KOPF(dataSince === null ? t.LETZTE_WOCHEN : t.SEIT(datumUtc(dataSince, sprache)))
+}
+
+/** Eine Befunddichte mit einer Nachkommastelle in der Schreibweise der Sprache; ohne Dichte `null`. */
+export function dichteText(dichte: number | null, sprache: Sprache): string | null {
+  return dichte === null
+    ? null
+    : formatierer(sprache).zahl(dichte, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+}
+
+/**
+ * Der Rückgang der Funde in ganzen Prozent; ein Anstieg steht negativ mit Minuszeichen (U+2212).
+ * Ohne Fund vorher `null`.
+ */
+export function rueckgangText(prozent: number | null, sprache: Sprache): string | null {
+  if (prozent === null) {
+    return null
+  }
+  const gerundet = Math.round(prozent)
+  const betrag = formatierer(sprache).zahl(Math.abs(gerundet))
+  return gerundet < 0 ? `−${betrag}` : betrag
+}
+
+/** Die Höhen einer Woche der Wochenleiste in Prozent der größten Dichte im Fenster. */
+export interface DichteHoehe {
+  vorher: number | null
+  endzustand: number | null
+}
+
+/**
+ * Die Höhen je Woche: die Summen-Dichte vor der Codeanalyse und im Endzustand in Prozent der
+ * größten Dichte im Fenster. Eine Woche ohne zählende Messung oder ohne Zeilen trägt keine Dichte
+ * und ist `null` — die Leiste zeigt dort die Lücke, keinen Balken der Höhe null.
+ */
+export function wochenHoehen(wochen: readonly CodeAnalysisWeek[]): (DichteHoehe | null)[] {
+  const paare = wochen.map((w) => ({ vorher: w.before?.findingsDensity ?? null, endzustand: w.final?.findingsDensity ?? null }))
+  const dichten = paare.flatMap((p) => [p.vorher, p.endzustand]).filter((d): d is number => d !== null)
+  const max = Math.max(0, ...dichten)
+  const hoehe = (dichte: number | null): number | null => {
+    if (dichte === null) {
+      return null
+    }
+    return max === 0 ? 0 : Math.round((dichte / max) * 100)
+  }
+  return paare.map((p) =>
+    p.vorher === null && p.endzustand === null ? null : { vorher: hoehe(p.vorher), endzustand: hoehe(p.endzustand) },
+  )
+}
+
+/** Der Text eines Grunds, warum Messungen nicht zählen; ein unbekannter Grund erscheint, wie er gemeldet wurde. */
+export function grundText(grund: string, sprache: Sprache): string {
+  const gruende: Readonly<Record<string, string>> = woerterbuch(sprache).LEITSTAND_CODEANALYSE.GRUENDE
+  return Object.hasOwn(gruende, grund) ? gruende[grund] : grund
+}
+
+/** Die jüngste Woche mit zählenden Messungen im Fenster, oder keine. */
+export function juengsteZaehlendeWoche(wochen: readonly CodeAnalysisWeek[]): CodeAnalysisWeek | null {
+  return wochen.findLast((w) => w.countingMeasurements > 0) ?? null
+}
