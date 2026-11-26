@@ -612,6 +612,74 @@ Restore haben keinen Verlauf. Liegt für das Projekt noch **keine einzige Meldun
 ganze Platte nur **„noch keine Auslieferung“** statt Nullen. Gezählt wird ab der ersten Meldung,
 frühere Releases werden nicht nachgetragen.
 
+### Platte Codeanalyse {#platte-codeanalyse}
+
+**„Codeanalyse“** steht unten neben „Auslieferung“ und zeigt je Woche, wie viele Funde der
+Codeanalyse die Umsetzung mitbringt und wie viele davon die Prüfungen vor dem Veröffentlichen
+abfangen. So lässt sich über die Zeit beurteilen, ob die Leitplanken des Workflow-Kits wirken. Die
+Werte zeigen, was die Prüfungen ab der Codeanalyse abfangen — nicht, was vor allen Prüfungen entstand.
+
+**Woher die Zahlen kommen:** allein aus Meldungen. Das Workflow-Kit meldet **je Veröffentlichung
+eine Messung** mit einem board-gebundenen Token (siehe
+[Rollen und Rechte](rollen-und-rechte.md#api-tokens)). Eine Messung gilt für das **ganze Projekt**,
+zu dem das Board des Tokens gehört; die Platte zeigt darum auf jedem Board des Projekts dieselben
+Zahlen, und kein anderes Projekt sieht sie. Eine zweite Meldung derselben Veröffentlichung ändert
+nichts.
+
+**Zwei Zustände.** Jede Messung trägt zwei Urteile der Codeanalyse:
+
+- **vor der Codeanalyse** — das erste Urteil über die Umsetzung, bevor die Prüfungen etwas
+  abgefangen haben;
+- **Endzustand** — das Urteil über den Stand, der tatsächlich veröffentlicht wurde.
+
+Je Zustand nennt sie die Funde je Art (**Fehler**, **Sicherheitslücken**, **Wartbarkeitsmängel**)
+und die Zahl der geänderten Zeilen.
+
+**Die Wochen** sind **Kalenderwochen** von Montag 0 Uhr bis Sonntag, gerechnet in **UTC** — für alle
+Leser gleich, egal in welcher Zeitzone sie sitzen. Gezeigt werden die **laufende Woche und die elf
+davor**. Eine Messung zählt in der Woche, in der ihr Stand veröffentlicht wurde, auch wenn die
+Meldung erst später ankommt. Liegt die erste Messung später als der Beginn dieser zwölf Wochen, steht
+im Kopf „seit ‹Datum›“.
+
+**Befunddichte** heißt: Funde je 1.000 geänderte Zeilen. Sie wird aus den **Wochensummen**
+gerechnet — alle Funde der zählenden Messungen einer Woche, geteilt durch alle ihre geänderten
+Zeilen, mal 1.000 —, nicht als Mittel einzelner Messungen. Neben jeder Dichte stehen die Zahl der
+Funde und die Zahl der Zeilen. Wurden keine Zeilen geändert, stehen Funde und Zeilen da, aber keine
+Dichte.
+
+**„Rückgang der Funde“** sagt, wie viel Prozent der Funde die Prüfungen abgefangen haben: Funde vor
+der Codeanalyse minus Funde im Endzustand, geteilt durch die Funde vor der Codeanalyse. Steigen die
+Funde, steht ein **negativer Wert** da, so wie er ist. Gab es vorher keinen Fund, steht kein
+Prozentwert da, nur die beiden Fundzahlen.
+
+**Wann eine Messung nicht zählt.** Das Kit sagt bei jeder Messung, ob sie zählt. Eine nicht zählende
+Messung geht in keine Dichte ein, steht aber mit ihrem Grund in der Woche. Die Gründe:
+
+- „keine Messung der Codeanalyse“
+- „Urteil vor der Codeanalyse fehlt“
+- „Urteil über den veröffentlichten Stand fehlt“
+- „Karten vor dem Veröffentlichen herausgenommen“
+- „Messung unvollständig“
+- „Funde nicht zuzuordnen“
+
+Meldet das Kit einen anderen Grund, erscheint er so, wie er gemeldet wurde.
+
+**Lücken statt Nullen.** Fehlen Daten, zeigt die Platte eine **Lücke**, keine Null: Eine Woche ohne
+zählende Messung hat keine Dichte, keine Fundzahlen und keinen Prozentwert — ihre nicht zählenden
+Messungen stehen trotzdem mit Grund da. Ist für das Projekt noch **gar keine Messung** angekommen
+(etwa mit älterer Fassung des Kits oder ohne Codeanalyse), zeigt die Platte nur **„noch keine
+Messung“**.
+
+**Aufbau der Platte.** Oben stehen die Zahlen der **jüngsten Woche mit zählenden Messungen**: die
+Dichte vor der Codeanalyse und im Endzustand je Art und als Summe, dazu Funde, Zeilen, die Zahl der
+Messungen, die Zahl der Karten und der Rückgang der Funde. Eine Karte, die in zwei
+Veröffentlichungen geprüft wurde, zählt dabei zweimal. Darunter zeigt eine **Wochenleiste** je Woche
+beide Summen-Dichten nebeneinander. **Alle Zahlen einer Woche** samt den nicht zählenden Messungen
+und ihren Gründen öffnen sich, wenn man die Woche mit der Maus überfährt, sie antippt oder sie mit
+der Tastatur ansteuert.
+
+**Wer sie sieht:** jedes Mitglied des Projekts, das das Board sehen darf — wie „Auslieferung“.
+
 **Was das Recht entscheidet:** das Band des jüngsten Runs, die Run-Kachel, Verbrauch, „Letzter Run“,
 „Abbruchgründe“, „Nacharbeit“ und „Modelle“ sieht nur, wer auch die [Runs](#nachtlauf) sehen darf — der **Owner** des
 Projekts und **Plattform-Admins**, sofern das Projekt am
