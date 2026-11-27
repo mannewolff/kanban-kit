@@ -49,7 +49,8 @@ export function rueckgangText(prozent: number | null, sprache: Sprache): string 
   const betragProzent = Math.abs(prozent)
   const ganz = Math.round(betragProzent)
   const zahl = formatierer(sprache).zahl
-  const betrag = ganz === 0 && betragProzent > 0 ? zahl(betragProzent, { maximumSignificantDigits: 1 }) : zahl(ganz)
+  // Bei `prozent === 0` liefern beide Zweige „0“; eine eigene Bedingung dafür wäre nicht messbar.
+  const betrag = ganz === 0 ? zahl(betragProzent, { maximumSignificantDigits: 1 }) : zahl(ganz)
   return prozent < 0 ? `−${betrag}` : betrag
 }
 
@@ -66,8 +67,8 @@ export interface DichteHoehe {
  */
 export function wochenHoehen(wochen: readonly CodeAnalysisWeek[]): (DichteHoehe | null)[] {
   const paare = wochen.map((w) => ({ vorher: w.before?.findingsDensity ?? null, endzustand: w.final?.findingsDensity ?? null }))
-  const dichten = paare.flatMap((p) => [p.vorher, p.endzustand]).filter((d): d is number => d !== null)
-  const max = Math.max(0, ...dichten)
+  // Eine fehlende Dichte zählt für das Maximum wie 0; die Untergrenze ist ohnehin 0.
+  const max = Math.max(0, ...paare.flatMap((p) => [p.vorher ?? 0, p.endzustand ?? 0]))
   const hoehe = (dichte: number | null): number | null => {
     if (dichte === null) {
       return null

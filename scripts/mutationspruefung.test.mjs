@@ -208,6 +208,13 @@ test('stryker.config.mjs: mutate ist dieselbe Ableitung wie im Treiber und schli
   assert.deepEqual(config.vitest, { configFile: 'vitest.mutation.config.ts' });
 });
 
+test('stryker.config.mjs: der Vorlauf hat mehr Zeit als Strykers Vorgabe von 5 Minuten (Issue #2287)', async () => {
+  // Der Vitest-Runner von Stryker faehrt den Vorlauf in einem einzigen Thread; der Testumfang
+  // der aufgenommenen Ausschnitte braucht dort mehr als 5 Minuten, und der Lauf brach ab.
+  const { default: config } = await import('../frontend/stryker.config.mjs');
+  assert.equal(config.dryRunTimeoutMinutes, 20);
+});
+
 test('stufenplanPruefen: der Repo-Plan ist gueltig', () => {
   assert.equal(stufenplanPruefen(repoPlan()), null);
 });

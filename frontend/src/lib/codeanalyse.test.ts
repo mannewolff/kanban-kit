@@ -91,6 +91,11 @@ describe('rueckgangText', () => {
     expect(rueckgangText(0.04, 'en')).toBe('0.04')
   })
 
+  it('kürzt einen kleinen Wert auf seine erste geltende Stelle, nicht auf mehrere Nachkommastellen', () => {
+    expect(rueckgangText(0.43, 'de')).toBe('0,4')
+    expect(rueckgangText(-0.043, 'en')).toBe('−0.04')
+  })
+
   it('lässt null ohne Text', () => {
     expect(rueckgangText(null, 'de')).toBeNull()
   })
