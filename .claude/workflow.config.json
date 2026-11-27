@@ -2,6 +2,9 @@
   "app": {
     "controlCenterUrl": "https://kanban.mwolff.org/boards/7/leitstand"
   },
+  "checkLimits": {
+    "publishMin": 40
+  },
   "codeHost": "github",
   "issueTracker": "toolbox",
   "buildChecks": [
