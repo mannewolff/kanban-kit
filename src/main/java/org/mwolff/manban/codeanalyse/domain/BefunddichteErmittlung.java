@@ -3,10 +3,10 @@ package org.mwolff.manban.codeanalyse.domain;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.OptionalInt;
 import java.util.TreeMap;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
@@ -35,19 +35,14 @@ public final class BefunddichteErmittlung {
 
   /** Die Wochenwerte zu den Messungen eines Projekts im Fenster bis {@code jetzt}. */
   public static Wochenwerte ermittle(Collection<Messung> messungen, Instant jetzt) {
-    List<List<Messung>> jeWoche = new ArrayList<>();
-    for (int i = 0; i < Kalenderwochen.ANZAHL; i++) {
-      jeWoche.add(new ArrayList<>());
-    }
+    Map<Integer, List<Messung>> jeWoche = new HashMap<>();
     for (Messung messung : messungen) {
-      OptionalInt index = Kalenderwochen.index(messung.publishedAt(), jetzt);
-      if (index.isPresent()) {
-        jeWoche.get(index.getAsInt()).add(messung);
-      }
+      Kalenderwochen.index(messung.publishedAt(), jetzt)
+          .ifPresent(i -> jeWoche.computeIfAbsent(i, k -> new ArrayList<>()).add(messung));
     }
     List<Woche> wochen = new ArrayList<>();
     for (int i = 0; i < Kalenderwochen.ANZAHL; i++) {
-      wochen.add(woche(Kalenderwochen.beginn(i, jetzt), jeWoche.get(i)));
+      wochen.add(woche(Kalenderwochen.beginn(i, jetzt), jeWoche.getOrDefault(i, List.of())));
     }
     Instant fensterbeginn = Kalenderwochen.fensterbeginn(jetzt);
     Instant dataSince =
