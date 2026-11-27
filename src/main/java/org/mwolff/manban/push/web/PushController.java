@@ -50,8 +50,10 @@ class PushController {
   static final int MAX_ENDPOINT = 2048;
 
   /**
-   * Endpunkt eines Push-Dienstes: {@code https}, Rechnername, optional ein Port, dann ein Pfad.
-   * Ohne Anmeldedaten vor dem Rechnernamen und ohne Leerzeichen.
+   * Form eines Endpunkts: {@code https}, Rechnername, optional ein Port, dann ein Pfad. Ohne
+   * Anmeldedaten vor dem Rechnernamen und ohne Leerzeichen. Die Form allein lässt auch Ziele im
+   * Netz des Servers zu; ob der Endpunkt zu einem Push-Dienst gehört, prüft {@code PushAboService}
+   * gegen {@code PushDienst} (Issue #2290).
    */
   static final String ENDPOINT_MUSTER = "^https://[A-Za-z0-9.-]+(:\\d{1,5})?/\\S*$";
 
@@ -116,7 +118,9 @@ class PushController {
   @ApiResponse(responseCode = "204", description = "Angelegt oder aufgefrischt.")
   @ApiResponse(
       responseCode = "400",
-      description = "Endpunkt oder Schlüssel fehlen oder haben nicht die erwartete Form.",
+      description =
+          "Endpunkt oder Schlüssel fehlen oder haben nicht die erwartete Form, oder der Endpunkt"
+              + " gehört zu keinem Push-Dienst der Browser (Google, Mozilla, Apple, Microsoft).",
       content =
           @Content(
               mediaType = ApiSchemas.PROBLEM_JSON,

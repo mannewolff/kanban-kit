@@ -123,7 +123,7 @@ class PushAboIT extends AbstractIntegrationTest {
     Cookie session = session(owner, PlatformRole.USER);
     long produkt = boards.createBoard(userId(owner), projectId, "Produkt").id();
     long betrieb = boards.createBoard(userId(owner), projectId, "Betrieb").id();
-    String endpoint = "https://push.example/owner-geraet";
+    String endpoint = "https://fcm.googleapis.com/fcm/send/owner-geraet";
 
     abonniere(session, endpoint).andExpect(status().isNoContent());
 
@@ -169,7 +169,7 @@ class PushAboIT extends AbstractIntegrationTest {
     long boardId = boards.createBoard(userId(owner), projectId, "Produkt").id();
     Cookie eigentuemer = session(owner, PlatformRole.USER);
     Cookie anderer = session("push-anderer@example.com", PlatformRole.USER);
-    String endpoint = "https://push.example/fremdes-geraet";
+    String endpoint = "https://fcm.googleapis.com/fcm/send/fremdes-geraet";
     abonniere(eigentuemer, endpoint).andExpect(status().isNoContent());
 
     abonniere(anderer, endpoint).andExpect(status().isConflict());
@@ -190,7 +190,7 @@ class PushAboIT extends AbstractIntegrationTest {
   void findById_liefertDasAboUndLeerFuerEinFehlendes() throws Exception {
     String email = "push-findbyid@example.com";
     Cookie session = session(email, PlatformRole.USER);
-    String endpoint = "https://push.example/findbyid";
+    String endpoint = "https://fcm.googleapis.com/fcm/send/findbyid";
     abonniere(session, endpoint).andExpect(status().isNoContent());
     long aboId = aboId(endpoint);
 
@@ -215,7 +215,7 @@ class PushAboIT extends AbstractIntegrationTest {
     long eigenesBoard = boards.createBoard(userId(owner), eigenes, "Eigen").id();
     long fremdesBoard = boards.createBoard(userId(fremderOwner), fremdes, "Fremd").id();
     Cookie session = session(owner, PlatformRole.USER);
-    String endpoint = "https://push.example/sicht-geraet";
+    String endpoint = "https://fcm.googleapis.com/fcm/send/sicht-geraet";
     abonniere(session, endpoint).andExpect(status().isNoContent());
 
     schalte(session, endpoint, fremdesBoard, false).andExpect(status().isNotFound());
@@ -237,11 +237,33 @@ class PushAboIT extends AbstractIntegrationTest {
                 .cookie(session)
                 .contentType("application/json")
                 .content(
-                    "{\"endpoint\":\"https://push.example/x\",\"p256dh\":\"kurz\",\"auth\":\"%s\"}"
+                    "{\"endpoint\":\"https://fcm.googleapis.com/fcm/send/x\",\"p256dh\":\"kurz\",\"auth\":\"%s\"}"
                         .formatted(AUTH)))
         .andExpect(status().isBadRequest());
-    assertThat(anzahl("SELECT count(*) FROM push_abo WHERE endpoint LIKE '%push.example/x'"))
-        .isZero();
+    assertThat(anzahl("SELECT count(*) FROM push_abo WHERE endpoint LIKE '%/fcm/send/x'")).isZero();
+  }
+
+  /**
+   * Der Angriff aus dem Sicherheitsbefund (Issue #2290): Ein angemeldeter Projekt-Owner setzt als
+   * Push-Adresse ein Ziel im Netz des Servers. Die Adresse hat die Form eines Endpunkts, gehört
+   * aber zu keinem Push-Dienst — sie wird abgewiesen, und es entsteht kein Abo, an das eine
+   * Laufbenachrichtigung gehen könnte.
+   */
+  @Test
+  void einZielImServernetzWirdAlsPushAdresseAbgewiesen() throws Exception {
+    String owner = "push-intern-owner@example.com";
+    projectOf(owner, "push-intern-admin@example.com");
+    Cookie session = session(owner, PlatformRole.USER);
+
+    for (String ziel :
+        List.of(
+            "https://127.0.0.1:8443/internal",
+            "https://10.0.0.1/admin",
+            "https://localhost/hook",
+            "https://fcm.googleapis.com@127.0.0.1/fcm/send/x")) {
+      abonniere(session, ziel).andExpect(status().isBadRequest());
+    }
+    assertThat(anzahl("SELECT count(*) FROM push_abo WHERE user_id = ?", userId(owner))).isZero();
   }
 
   /** Ohne VAPID-Schlüssel ist Push abgeschaltet, und der Schlüssel-Aufruf antwortet 404 (E16). */
@@ -258,7 +280,7 @@ class PushAboIT extends AbstractIntegrationTest {
             put("/api/push/abo")
                 .contentType("application/json")
                 .content(
-                    "{\"endpoint\":\"https://push.example/ohne\",\"p256dh\":\"%s\",\"auth\":\"%s\"}"
+                    "{\"endpoint\":\"https://fcm.googleapis.com/fcm/send/ohne\",\"p256dh\":\"%s\",\"auth\":\"%s\"}"
                         .formatted(P256DH, AUTH)))
         .andExpect(status().isUnauthorized());
   }
@@ -271,7 +293,7 @@ class PushAboIT extends AbstractIntegrationTest {
     long projectId = projectOf(owner, "push-kette-admin@example.com");
     long boardId = boards.createBoard(userId(owner), projectId, "Produkt").id();
     Cookie session = session(owner, PlatformRole.USER);
-    String endpoint = "https://push.example/kette-board";
+    String endpoint = "https://fcm.googleapis.com/fcm/send/kette-board";
     abonniere(session, endpoint).andExpect(status().isNoContent());
     schalte(session, endpoint, boardId, false).andExpect(status().isNoContent());
     long aboId = aboId(endpoint);
@@ -283,7 +305,7 @@ class PushAboIT extends AbstractIntegrationTest {
 
     // Konto gelöscht → sein Abo geht mit.
     String nurAbo = "push-kette-konto@example.com";
-    String kontoEndpoint = "https://push.example/kette-konto";
+    String kontoEndpoint = "https://fcm.googleapis.com/fcm/send/kette-konto";
     abonniere(session(nurAbo, PlatformRole.USER), kontoEndpoint).andExpect(status().isNoContent());
     jdbc.update("DELETE FROM app_user WHERE id = ?", userId(nurAbo));
     assertThat(anzahl("SELECT count(*) FROM push_abo WHERE endpoint = ?", kontoEndpoint)).isZero();

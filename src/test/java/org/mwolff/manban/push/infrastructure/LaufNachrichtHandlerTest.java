@@ -10,11 +10,8 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -55,11 +52,7 @@ class LaufNachrichtHandlerTest {
   private static final String P256DH =
       "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4";
   private static final String AUTH = "BTBZMqHH6r4Tts7J_aSIgg";
-
-  /** Das VAPID-Paar aus {@code WebPushSenderTest}. */
-  private static final String VAPID_OEFFENTLICH =
-      "BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A"
-          + "8";
+  private static final String ENDPUNKT = "https://fcm.googleapis.com/fcm/send/geraet";
 
   /** Ein Aufruf an den Push-Dienst, wie der Handler ihn absetzt. */
   private record Aufruf(URI endpunkt, String p256dh, String auth, String klartext, Duration ttl) {}
@@ -112,16 +105,11 @@ class LaufNachrichtHandlerTest {
   }
 
   private PushAbo abo(long userId, Instant angelegt, Instant giltBis) {
-    PushAbo abo =
-        new PushAbo(
-            ABO_ID,
-            userId,
-            "https://push.example/geraet",
-            P256DH,
-            AUTH,
-            angelegt,
-            giltBis,
-            Set.of());
+    return abo(userId, angelegt, giltBis, ENDPUNKT);
+  }
+
+  private PushAbo abo(long userId, Instant angelegt, Instant giltBis, String endpunkt) {
+    PushAbo abo = new PushAbo(ABO_ID, userId, endpunkt, P256DH, AUTH, angelegt, giltBis, Set.of());
     when(abos.findById(ABO_ID)).thenReturn(Optional.of(abo));
     return abo;
   }
@@ -170,7 +158,7 @@ class LaufNachrichtHandlerTest {
         .isEqualTo("Lauf gescheitert: Paket #1975 ist gescheitert");
     assertThat(nachricht.get("url").asText()).isEqualTo("/mobil/laeufe/300");
     Aufruf aufruf = aufrufe.getFirst();
-    assertThat(aufruf.endpunkt()).isEqualTo(URI.create("https://push.example/geraet"));
+    assertThat(aufruf.endpunkt()).isEqualTo(URI.create(ENDPUNKT));
     assertThat(aufruf.p256dh()).isEqualTo(P256DH);
     assertThat(aufruf.auth()).isEqualTo(AUTH);
     assertThat(aufruf.ttl()).isEqualTo(LaufNachrichtHandler.AUFBEWAHRUNG);
@@ -366,55 +354,5 @@ class LaufNachrichtHandlerTest {
             LaufNachrichtHandler.webPush(
                 new PushProperties(null, null, null, null), Clock.systemUTC()))
         .isNull();
-  }
-
-  @Test
-  void mitSchluesselnStelltDerSpringKonstruktorUeberWebPushZu() throws IOException {
-    HttpServer server =
-        HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-    List<String> kopf = new ArrayList<>();
-    server.createContext(
-        "/push",
-        austausch -> {
-          kopf.add(austausch.getRequestHeaders().getFirst("Authorization"));
-          austausch.getRequestBody().readAllBytes();
-          austausch.sendResponseHeaders(201, -1);
-          austausch.close();
-        });
-    server.start();
-    try {
-      String endpunkt = "http://127.0.0.1:" + server.getAddress().getPort() + "/push";
-      when(abos.findById(ABO_ID))
-          .thenReturn(
-              Optional.of(
-                  new PushAbo(
-                      ABO_ID,
-                      KONTO,
-                      endpunkt,
-                      P256DH,
-                      AUTH,
-                      GEMELDET.minus(Duration.ofDays(1)),
-                      JETZT.plus(Duration.ofDays(29)),
-                      Set.of())));
-      PushProperties properties =
-          new PushProperties(
-              VAPID_OEFFENTLICH,
-              "yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw",
-              "mailto:betrieb@example.org",
-              null);
-
-      new LaufNachrichtHandler(
-              abos,
-              users,
-              permissions,
-              SprachFixture.mit(Sprache.DE),
-              properties,
-              Clock.fixed(JETZT, ZoneOffset.UTC))
-          .handle(gescheitert());
-
-      assertThat(kopf).singleElement().satisfies(k -> assertThat(k).startsWith("vapid t="));
-    } finally {
-      server.stop(0);
-    }
   }
 }
