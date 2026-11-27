@@ -17,7 +17,10 @@
       "gh issue *",
       "npm install*",
       "npm ci*",
-      "node .claude/kit/worktree.mjs publish-state*"
+      "node .claude/kit/worktree.mjs publish-state*",
+      "node .claude/kit/worktree.mjs fetch*",
+      "node .claude/kit/worktree.mjs push *",
+      "node .claude/kit/worktree.mjs clean-check-branch*"
     ],
     "network": {
       "allowLocalBinding": true,
@@ -36,6 +39,11 @@
         "gh issue *",
         "npm install*",
         "npm ci*"
+      ]
+    },
+    "filesystem": {
+      "allowWrite": [
+        "~/.cache/claude-workflow-kit/worktrees"
       ]
     }
   },

@@ -411,7 +411,7 @@ function kartenpruefungAnstossen(hook) {
   if (!res.error && res.status === 0) {
     process.stderr.write(res.stderr || "");
     if (process.env.SANDBOX_RUNTIME === "1") {
-      process.stderr.write(process.env.KIT_AGENT_MODEL ? text("inSandboxRunner", { hook }) : text("inSandbox", { hook, kommando: "node .claude/kit/night.mjs --card-check --again" }));
+      process.stderr.write(process.env.KIT_AGENT_MODEL ? text("inSandboxRunner", { hook }) : text("inSandbox", { hook, kommando: "node .claude/kit/night.mjs --card-check --detach" }));
     }
   } else {
     const grund = res.error?.message ?? [(res.stderr || "").trim(), text("exitCode", { status: res.status })].filter(Boolean).join(" — ");
