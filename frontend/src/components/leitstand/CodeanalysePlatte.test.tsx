@@ -2,6 +2,8 @@ import { act, fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it, test } from 'vitest'
 import type { CodeAnalysisState, CodeAnalysisView, CodeAnalysisWeek } from '../../api/dashboard'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
+import { cssRegel } from '../../test/cssRegel'
+import { KUPFER, MELDER, TEXT_SCHWACH } from '../../theme'
 import { CodeanalysePlatte } from './CodeanalysePlatte'
 
 /** Die Platte „Codeanalyse“ (Issue #2280, Plan #2272 E9, E10, E11, E15). */
@@ -159,6 +161,10 @@ describe('CodeanalysePlatte', () => {
     expect(angabe(k, 'Messungen')).toBe('2')
     expect(angabe(k, 'Karten')).toBe('5')
     expect(angabe(k, 'Rückgang der Funde')).toBe('75 %')
+    // Jede Zahl ist gemeldet und steht darum in der Textfarbe, nicht in der schwachen Farbe.
+    for (const begriff of ['Messungen', 'Karten', 'Rückgang der Funde']) {
+      expect(cssRegel(wert(k, begriff))).not.toContain(TEXT_SCHWACH)
+    }
     // Die nicht zählenden Messungen stehen erst im Bereich der gewählten Woche.
     expect(k).not.toHaveTextContent('nicht zählende Messungen')
   })
@@ -198,6 +204,8 @@ describe('CodeanalysePlatte', () => {
     renderMitSprache(<CodeanalysePlatte daten={daten()} />)
     expect(bereich()).toHaveTextContent('Eine Woche überfahren, antippen oder mit der Tastatur wählen, um alle ihre Zahlen zu sehen.')
     expect(within(bereich()).queryByRole('table')).not.toBeInTheDocument()
+    // Ohne Wahl benennt der Hinweis den Bereich.
+    expect(bereich()).toHaveAccessibleName('Eine Woche überfahren, antippen oder mit der Tastatur wählen, um alle ihre Zahlen zu sehen.')
   })
 
   it.each([
@@ -297,6 +305,9 @@ describe('CodeanalysePlatte', () => {
     expect(within(k).getByTestId('codeanalyse-saeule-endzustand-25')).toBeInTheDocument()
     expect(within(woche(/^KW 45:/)).getByTestId('codeanalyse-saeule-vorher-67')).toBeInTheDocument()
     expect(screen.getByTestId('codeanalyse-legende')).toHaveTextContent(/vor der Codeanalyse.*Endzustand/)
+    // Die Säule vorher trägt die Stahlfarbe, die des Endzustands Kupfer — wie die Legende.
+    expect(cssRegel(within(k).getByTestId('codeanalyse-saeule-vorher-100'))).toContain(`background-color: ${MELDER.stahl}`)
+    expect(cssRegel(within(k).getByTestId('codeanalyse-saeule-endzustand-25'))).toContain(`background-color: ${KUPFER}`)
     expect(screen.getByTestId('wochen-leiste')).toHaveTextContent(/^37.*48$/)
   })
 
@@ -311,13 +322,18 @@ describe('CodeanalysePlatte', () => {
   })
 
   it.each([
-    ['ohne Zeilen im Endzustand', 'final', 'KW 47: vor der Codeanalyse 30,0, Endzustand keine Dichte (0 Zeilen) Funde je 1.000 Zeilen'],
-    ['ohne Zeilen vor der Codeanalyse', 'before', 'KW 47: vor der Codeanalyse keine Dichte (0 Zeilen), Endzustand 7,5 Funde je 1.000 Zeilen'],
-  ] as const)('nennt eine Woche %s mit dem Hinweis an der fehlenden Dichte', (_fall, zustandOhneZeilen, name) => {
+    ['ohne Zeilen im Endzustand', 'final', 'KW 47: vor der Codeanalyse 30,0, Endzustand keine Dichte (0 Zeilen) Funde je 1.000 Zeilen', 'vorher-100', 'endzustand'],
+    ['ohne Zeilen vor der Codeanalyse', 'before', 'KW 47: vor der Codeanalyse keine Dichte (0 Zeilen), Endzustand 7,5 Funde je 1.000 Zeilen', 'endzustand-30', 'vorher'],
+  ] as const)('nennt eine Woche %s mit dem Hinweis an der fehlenden Dichte', (_fall, zustandOhneZeilen, name, saeule, ohneDichte) => {
     const w = wochen()
     w[JUENGSTE] = { ...w[JUENGSTE], [zustandOhneZeilen]: zustand({ bugs: 1, findings: 1 }) }
     renderMitSprache(<CodeanalysePlatte daten={daten({ weeks: w })} />)
-    expect(screen.getAllByRole('button')[JUENGSTE]).toHaveAccessibleName(name)
+    const k = screen.getAllByRole('button')[JUENGSTE]
+    expect(k).toHaveAccessibleName(name)
+    // Der Zustand mit Dichte hat seine Säule, der ohne Dichte steht als Grundlinie daneben.
+    expect(within(k).getByTestId(`codeanalyse-saeule-${saeule}`)).toBeInTheDocument()
+    expect(within(k).queryByTestId(new RegExp(`^codeanalyse-saeule-${ohneDichte}`))).not.toBeInTheDocument()
+    expect(within(k).getByTestId('grundlinie')).toBeInTheDocument()
   })
 
   it('lässt den Rückgang weg, wenn es vorher keinen Fund gab (AK 4)', () => {
@@ -325,6 +341,7 @@ describe('CodeanalysePlatte', () => {
     w[JUENGSTE] = { ...w[JUENGSTE], reductionPercent: null }
     renderMitSprache(<CodeanalysePlatte daten={daten({ weeks: w })} />)
     expect(within(kopf()).queryByText('Rückgang der Funde')).not.toBeInTheDocument()
+    expect(within(kopf()).getAllByRole('term').map((b) => b.textContent)).toEqual(['Messungen', 'Karten'])
     expect(within(kopf()).getByRole('row', { name: /^Summe/ })).toHaveTextContent(/Funde 12.*Funde 3/)
   })
 
@@ -359,6 +376,11 @@ describe('CodeanalysePlatte', () => {
 
 /** Der Wert zu einem Begriff in der Angabenliste unter einer Woche. */
 function angabe(behaelter: HTMLElement, begriff: string): string | null {
+  return wert(behaelter, begriff).textContent
+}
+
+/** Das Element des Werts zu einem Begriff in der Angabenliste unter einer Woche. */
+function wert(behaelter: HTMLElement, begriff: string): Element {
   const dt = within(behaelter).getByText(begriff, { selector: 'dt' })
-  return dt.nextElementSibling?.textContent ?? null
+  return dt.nextElementSibling!
 }

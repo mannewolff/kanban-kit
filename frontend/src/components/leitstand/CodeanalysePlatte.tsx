@@ -209,7 +209,7 @@ function Wochen({ wochen }: Readonly<{ wochen: readonly CodeAnalysisWeek[] }>) {
               '&.Mui-focusVisible': { outlineWidth: 2, outlineStyle: 'solid', outlineColor: KUPFER, outlineOffset: '1px' },
             }}
           >
-            <SaeulenPaar hoehe={hoehen[i]} ohneZeilen={hoehen[i] === null && w.countingMeasurements > 0} />
+            <SaeulenPaar hoehe={hoehen[i]} ohneZeilen={w.countingMeasurements > 0} />
           </ButtonBase>
         ))}
       </Box>
@@ -257,6 +257,7 @@ function wochenName(
 /**
  * Die beiden Säulen einer Woche (vorher, Endzustand). Ohne Dichte steht die Grundlinie, bei
  * Messungen ohne Zeilen mit dem Hinweis darunter; eine Dichte von null ist ebenfalls die Grundlinie.
+ * `ohneZeilen` sagt, ob die Woche zählende Messungen hat — es wirkt nur, wenn die Höhe fehlt.
  */
 function SaeulenPaar({ hoehe, ohneZeilen }: Readonly<{ hoehe: DichteHoehe | null; ohneZeilen: boolean }>) {
   const t = useT().LEITSTAND_CODEANALYSE
