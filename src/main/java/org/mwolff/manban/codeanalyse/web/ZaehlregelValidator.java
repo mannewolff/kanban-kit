@@ -53,21 +53,24 @@ public final class ZaehlregelValidator
   private static boolean zahl(
       @Nullable Integer wert, String feld, ConstraintValidatorContext context) {
     if (wert == null) {
-      return verstoss(feld, ZAHL_FEHLT, context);
+      verstoss(feld, ZAHL_FEHLT, context);
+      return false;
     }
-    return wert >= 0 || verstoss(feld, ZAHL_NEGATIV, context);
+    return vorhanden(wert >= 0, feld, ZAHL_NEGATIV, context);
   }
 
   private static boolean vorhanden(
       boolean da, String feld, String meldung, ConstraintValidatorContext context) {
-    return da || verstoss(feld, meldung, context);
+    if (!da) {
+      verstoss(feld, meldung, context);
+    }
+    return da;
   }
 
-  private static boolean verstoss(String feld, String meldung, ConstraintValidatorContext context) {
+  private static void verstoss(String feld, String meldung, ConstraintValidatorContext context) {
     context
         .buildConstraintViolationWithTemplate(meldung)
         .addPropertyNode(feld)
         .addConstraintViolation();
-    return false;
   }
 }
