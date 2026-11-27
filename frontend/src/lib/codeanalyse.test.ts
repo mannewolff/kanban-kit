@@ -120,6 +120,11 @@ describe('wochenHoehen', () => {
 
   it('lässt einen Zustand ohne Dichte leer, wenn der andere eine trägt', () => {
     expect(wochenHoehen([zaehlend('2026-11-02T00:00:00Z', 2, null)])).toEqual([{ vorher: 100, endzustand: null }])
+    expect(wochenHoehen([zaehlend('2026-11-02T00:00:00Z', null, 2)])).toEqual([{ vorher: null, endzustand: 100 }])
+  })
+
+  it('nimmt die größte Dichte auch aus dem Endzustand', () => {
+    expect(wochenHoehen([zaehlend('2026-11-02T00:00:00Z', 1, 4)])).toEqual([{ vorher: 25, endzustand: 100 }])
   })
 
   it('lässt eine positive Dichte neben einer viel größeren nicht auf Höhe 0 fallen', () => {
