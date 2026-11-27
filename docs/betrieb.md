@@ -1040,6 +1040,11 @@ abgeschalteter Mailversand als Konfigurationsfehler: Das Log nennt nur die Adres
 („Anmeldecode für … nicht zugestellt"), der Code geht verloren, und die Anmeldung gelingt erst mit
 `MANBAN_MAIL_ENABLED=true`.
 
+**Dasselbe gilt für Einladungs-Links** (Issue #2291): Sie tragen den Einladungstoken und stehen nur
+im Entwicklungsbetrieb im Log. Ohne ihn nennt das Log nur das Projekt („Einladung ins Projekt …
+nicht zugestellt"), weder Adresse noch Link, und die Einladung kommt erst mit
+`MANBAN_MAIL_ENABLED=true` an.
+
 **Mit eingeschaltetem Mailversand steht der Code nie im Protokoll** — dort steht dann nur, dass
 eine Mail versandt wurde. Das ist gewollt: Wer das Protokoll lesen kann, soll sich damit nicht
 anmelden können.

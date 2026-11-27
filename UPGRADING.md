@@ -35,6 +35,11 @@ Sonst könnte jeder mit Lesezugriff auf das Protokoll sich an einem fremden Kont
 ohne Mailversand und ohne Entwicklungsbetrieb betreibt — etwa mit dem Betriebs-Overlay —, schaltet
 den Mailversand ein; ohne ihn kommt kein Anmeldecode mehr an.
 
+Dasselbe gilt für Einladungs-Links (Issue #2291): Sie tragen den Einladungstoken und stehen ohne
+Entwicklungsbetrieb nicht mehr im Protokoll — dort steht dann nur, dass die Einladung ins Projekt
+nicht zugestellt wurde. Ohne Mailversand kommt außerhalb des Entwicklungsbetriebs also auch keine
+Einladung mehr an.
+
 ## 3.3.0 — Anmeldung per Einmalcode statt Passwort
 
 Angemeldet wird nur noch per Einmalcode aus einer Mail; das Passwort entfällt ganz. Handarbeit

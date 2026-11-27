@@ -1,22 +1,28 @@
 package org.mwolff.manban.project.infrastructure.mail;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.common.i18n.SprachFixture;
 import org.mwolff.manban.common.i18n.Sprache;
 import org.mwolff.manban.project.domain.ProjectRole;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 
 /**
  * Einladung und Zuordnung in der eingestellten Sprache (Issue #1643, Plan #1638 A6). Der
- * Projektname ist Nutzerinhalt und erscheint unverändert, auch mit Apostroph.
+ * Projektname ist Nutzerinhalt und erscheint unverändert, auch mit Apostroph. Der Einladungslink
+ * steht nur im ausdrücklich eingeschalteten Entwicklungsbetrieb im Protokoll (Issue #2291).
  */
+@ExtendWith(OutputCaptureExtension.class)
 class JavaMailInvitationMailerTest {
 
   private static final String EINLADUNG = "https://app/invitations/accept?token=abc";
@@ -25,8 +31,17 @@ class JavaMailInvitationMailerTest {
   private final JavaMailSender mailSender = mock(JavaMailSender.class);
 
   private JavaMailInvitationMailer mailer(Sprache sprache, boolean mailEnabled) {
+    return mailer(sprache, mailEnabled, true);
+  }
+
+  private JavaMailInvitationMailer mailer(Sprache sprache, boolean mailEnabled, boolean devMode) {
     return new JavaMailInvitationMailer(
-        mailSender, mailEnabled, "no-reply@example.org", "kanban-kit", SprachFixture.mit(sprache));
+        mailSender,
+        mailEnabled,
+        devMode,
+        "no-reply@example.org",
+        "kanban-kit",
+        SprachFixture.mit(sprache));
   }
 
   private SimpleMailMessage versandt() {
@@ -116,5 +131,48 @@ class JavaMailInvitationMailerTest {
     mailer.sendProjectAssignedEmail("bob@example.org", "Projekt P", ProjectRole.ADMIN, PROJEKT_URL);
 
     verifyNoInteractions(mailSender);
+  }
+
+  @Test
+  void imEntwicklungsbetriebStehtDerEinladungslinkImProtokoll(CapturedOutput output) {
+    mailer(Sprache.DE, false, true).sendInvitationEmail("bob@example.org", "Projekt P", EINLADUNG);
+
+    assertThat(output.getOut())
+        .contains("[DEV] Einladung ins Projekt 'Projekt P' für bob@example.org")
+        .contains(EINLADUNG);
+    verifyNoInteractions(mailSender);
+  }
+
+  /**
+   * Angriff aus Issue #2291: Wer die Anwendungsprotokolle lesen darf, aber nicht eingeladen ist,
+   * darf dort weder den Einladungstoken noch die Adresse des Eingeladenen finden — auch nicht im
+   * Text der Ausnahme, die der Outbox-Worker protokolliert. Ohne Entwicklungsbetrieb ist ein
+   * abgeschalteter Mailversand ein Konfigurationsfehler, und der Versand scheitert.
+   */
+  @Test
+  void ohneEntwicklungsbetriebGelangtKeinEinladungsgeheimnisInsProtokoll(CapturedOutput output) {
+    JavaMailInvitationMailer mailer = mailer(Sprache.DE, false, false);
+
+    assertThatThrownBy(() -> mailer.sendInvitationEmail("bob@example.org", "Projekt P", EINLADUNG))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("manban.mail.enabled")
+        .hasMessageNotContaining("token=abc")
+        .hasMessageNotContaining("bob@example.org");
+
+    assertThat(output.getAll())
+        .contains("Einladung ins Projekt 'Projekt P' nicht zugestellt")
+        .doesNotContain("token=abc")
+        .doesNotContain("bob@example.org")
+        .doesNotContain("[DEV]");
+    verifyNoInteractions(mailSender);
+  }
+
+  @Test
+  void mitMailversandStehtDerEinladungslinkNieImProtokoll(CapturedOutput output) {
+    mailer(Sprache.DE, true, false).sendInvitationEmail("bob@example.org", "Projekt P", EINLADUNG);
+
+    assertThat(output.getOut())
+        .contains("Einladungs-E-Mail an bob@example.org versandt")
+        .doesNotContain("token=abc");
   }
 }
