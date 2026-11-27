@@ -39,15 +39,18 @@ export function dichteText(dichte: number | null, sprache: Sprache): string | nu
 
 /**
  * Der Rückgang der Funde in ganzen Prozent; ein Anstieg steht negativ mit Minuszeichen (U+2212).
- * Ohne Fund vorher `null`.
+ * Eine Änderung, die auf ganze Prozent gerundet null wäre, steht mit ihrer ersten geltenden Stelle
+ * da (−0,4), damit ein kleiner Anstieg sein Vorzeichen behält (Issue #2283). Ohne Fund vorher `null`.
  */
 export function rueckgangText(prozent: number | null, sprache: Sprache): string | null {
   if (prozent === null) {
     return null
   }
-  const gerundet = Math.round(prozent)
-  const betrag = formatierer(sprache).zahl(Math.abs(gerundet))
-  return gerundet < 0 ? `−${betrag}` : betrag
+  const betragProzent = Math.abs(prozent)
+  const ganz = Math.round(betragProzent)
+  const zahl = formatierer(sprache).zahl
+  const betrag = ganz === 0 && betragProzent > 0 ? zahl(betragProzent, { maximumSignificantDigits: 1 }) : zahl(ganz)
+  return prozent < 0 ? `−${betrag}` : betrag
 }
 
 /** Die Höhen einer Woche der Wochenleiste in Prozent der größten Dichte im Fenster. */
@@ -69,7 +72,9 @@ export function wochenHoehen(wochen: readonly CodeAnalysisWeek[]): (DichteHoehe 
     if (dichte === null) {
       return null
     }
-    return max === 0 ? 0 : Math.round((dichte / max) * 100)
+    // Eine positive Dichte fällt nie auf Höhe 0: Die Säule der Höhe 0 ist die Grundlinie, und die
+    // hieße „keine Funde“ (Issue #2283).
+    return dichte === 0 ? 0 : Math.max(1, Math.round((dichte / max) * 100))
   }
   return paare.map((p) =>
     p.vorher === null && p.endzustand === null ? null : { vorher: hoehe(p.vorher), endzustand: hoehe(p.endzustand) },

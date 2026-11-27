@@ -78,8 +78,17 @@ describe('rueckgangText', () => {
     expect(rueckgangText(-1250, 'de')).toBe('−1.250')
   })
 
-  it('zeigt einen auf null gerundeten Anstieg ohne Minuszeichen', () => {
-    expect(rueckgangText(-0.4, 'de')).toBe('0')
+  it('zeigt einen kleinen Anstieg mit Minuszeichen und seiner ersten geltenden Stelle, nicht als 0', () => {
+    // 1000 → 1004 Funde: Rückgang −0,4 %.
+    expect(rueckgangText(-0.4, 'de')).toBe('−0,4')
+    expect(rueckgangText(-0.4, 'en')).toBe('−0.4')
+    expect(rueckgangText(-0.5, 'de')).toBe('−1')
+    expect(rueckgangText(-0.04, 'de')).toBe('−0,04')
+  })
+
+  it('zeigt einen kleinen Rückgang mit seiner ersten geltenden Stelle, nicht als 0', () => {
+    expect(rueckgangText(0.4, 'de')).toBe('0,4')
+    expect(rueckgangText(0.04, 'en')).toBe('0.04')
   })
 
   it('lässt null ohne Text', () => {
@@ -106,6 +115,11 @@ describe('wochenHoehen', () => {
 
   it('lässt einen Zustand ohne Dichte leer, wenn der andere eine trägt', () => {
     expect(wochenHoehen([zaehlend('2026-11-02T00:00:00Z', 2, null)])).toEqual([{ vorher: 100, endzustand: null }])
+  })
+
+  it('lässt eine positive Dichte neben einer viel größeren nicht auf Höhe 0 fallen', () => {
+    expect(wochenHoehen([zaehlend('2026-11-02T00:00:00Z', 1000, 1)])).toEqual([{ vorher: 100, endzustand: 1 }])
+    expect(wochenHoehen([zaehlend('2026-11-02T00:00:00Z', 1000, 0)])).toEqual([{ vorher: 100, endzustand: 0 }])
   })
 
   it('zeigt lauter Null-Dichten als Höhe 0, nicht als Lücke', () => {
