@@ -411,6 +411,39 @@
     },
     "abgekuendigtSeit" : null
   }, {
+    "pfad" : "/api/kanban/code-analysis-measurements",
+    "methode" : "POST",
+    "parameter" : [ {
+      "in" : "header",
+      "name" : "Idempotency-Key",
+      "required" : false,
+      "schema" : {
+        "type" : "string"
+      }
+    } ],
+    "rumpf" : {
+      "content" : {
+        "application/json" : {
+          "schema" : {
+            "$ref" : "#/components/schemas/CodeAnalysisMeasurementRequest"
+          }
+        }
+      },
+      "required" : true
+    },
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/CodeAnalysisMeasurementResponse"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
     "pfad" : "/api/kanban/deployments",
     "methode" : "POST",
     "parameter" : [ ],
@@ -855,6 +888,88 @@
           "type" : "integer"
         }
       },
+      "type" : "object"
+    },
+    "CodeAnalysisMeasurementRequest" : {
+      "properties" : {
+        "baseCommit" : {
+          "maxLength" : 64,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "before" : {
+          "$ref" : "#/components/schemas/CodeAnalysisStateRequest"
+        },
+        "cards" : {
+          "format" : "int32",
+          "minimum" : 0,
+          "type" : "integer"
+        },
+        "counts" : {
+          "type" : "boolean"
+        },
+        "final" : {
+          "$ref" : "#/components/schemas/CodeAnalysisStateRequest"
+        },
+        "kitVersion" : {
+          "maxLength" : 50,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "publishedAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "publishedCommit" : {
+          "maxLength" : 64,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "reason" : {
+          "maxLength" : 100,
+          "minLength" : 0,
+          "pattern" : "[a-z0-9-]*",
+          "type" : "string"
+        }
+      },
+      "required" : [ "baseCommit", "cards", "counts", "kitVersion", "publishedAt", "publishedCommit" ],
+      "type" : "object"
+    },
+    "CodeAnalysisMeasurementResponse" : {
+      "properties" : {
+        "counts" : {
+          "type" : "boolean"
+        },
+        "publishedCommit" : {
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "CodeAnalysisStateRequest" : {
+      "properties" : {
+        "bugs" : {
+          "format" : "int32",
+          "minimum" : 0,
+          "type" : "integer"
+        },
+        "changedLines" : {
+          "format" : "int32",
+          "minimum" : 0,
+          "type" : "integer"
+        },
+        "codeSmells" : {
+          "format" : "int32",
+          "minimum" : 0,
+          "type" : "integer"
+        },
+        "vulnerabilities" : {
+          "format" : "int32",
+          "minimum" : 0,
+          "type" : "integer"
+        }
+      },
+      "required" : [ "bugs", "changedLines", "codeSmells", "vulnerabilities" ],
       "type" : "object"
     },
     "Comment" : {

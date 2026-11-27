@@ -184,6 +184,53 @@ export interface DeliveryView {
   weeks: DeliveryWeek[]
 }
 
+/**
+ * Die Wochensummen eines Zustands der Platte „Codeanalyse“ über alle zählenden Messungen (Plan
+ * #2272, E9). Jede Dichte ist Funde je 1.000 geänderte Zeilen aus den Summen; ohne Zeilen `null`.
+ */
+export interface CodeAnalysisState {
+  bugs: number
+  vulnerabilities: number
+  codeSmells: number
+  findings: number
+  changedLines: number
+  bugsDensity: number | null
+  vulnerabilitiesDensity: number | null
+  codeSmellsDensity: number | null
+  findingsDensity: number | null
+}
+
+/** Nicht zählende Messungen einer Woche mit demselben Grund, wie ihn das Kit meldete. */
+export interface CodeAnalysisNotCounting {
+  reason: string
+  count: number
+}
+
+/**
+ * Eine Kalenderwoche der Platte „Codeanalyse“, Montag 00:00 UTC (E11). Ohne zählende Messung sind
+ * `cards`, `before`, `final` und `reductionPercent` `null`; `notCounting` steht trotzdem da.
+ */
+export interface CodeAnalysisWeek {
+  weekStart: string
+  countingMeasurements: number
+  cards: number | null
+  before: CodeAnalysisState | null
+  final: CodeAnalysisState | null
+  /** (Funde vorher − Funde Endzustand) / Funde vorher × 100; negativ, wenn die Funde steigen. */
+  reductionPercent: number | null
+  notCounting: CodeAnalysisNotCounting[]
+}
+
+/** Die Platte „Codeanalyse“ mit den Daten des ganzen Projekts über zwölf Kalenderwochen (Plan #2272, E9). */
+export interface CodeAnalysisView {
+  /** Ob für das Projekt je eine Messung angekommen ist, zählend oder nicht. */
+  hasMeasurements: boolean
+  /** Die Veröffentlichung der ersten Messung, wenn sie im Fenster liegt; sonst `null` („letzte 12 Wochen“). */
+  dataSince: string | null
+  /** Die zwölf Wochen, die älteste zuerst. */
+  weeks: CodeAnalysisWeek[]
+}
+
 export const dashboardApi = {
   get: (boardId: number) => apiFetch<BoardDashboardKpis>(`/api/boards/${boardId}/dashboard`),
   /**
@@ -204,6 +251,8 @@ export const dashboardApi = {
   aging: (boardId: number) => apiFetch<AgingWip>(`/api/boards/${boardId}/dashboard/aging`),
   /** Die Platte „Auslieferung“ mit den Daten des ganzen Projekts (Plan #1831, E1, E5). */
   delivery: (boardId: number) => apiFetch<DeliveryView>(`/api/boards/${boardId}/dashboard/delivery`),
+  /** Die Platte „Codeanalyse“ mit den Daten des ganzen Projekts (Plan #2272, E9). */
+  codeAnalysis: (boardId: number) => apiFetch<CodeAnalysisView>(`/api/boards/${boardId}/dashboard/code-analysis`),
 }
 
 export type DashboardApi = typeof dashboardApi

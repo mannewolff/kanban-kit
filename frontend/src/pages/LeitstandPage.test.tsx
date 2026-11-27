@@ -18,7 +18,7 @@ import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { byNumber: vi.fn() } }))
-vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn(), flow: vi.fn(), aging: vi.fn(), epicForecast: vi.fn(), delivery: vi.fn() } }))
+vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn(), flow: vi.fn(), aging: vi.fn(), epicForecast: vi.fn(), delivery: vi.fn(), codeAnalysis: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn(), models: vi.fn() } }))
@@ -54,6 +54,7 @@ const m = {
   alter: dashboardApi.aging as ReturnType<typeof vi.fn>,
   prognose: dashboardApi.epicForecast as ReturnType<typeof vi.fn>,
   auslieferung: dashboardApi.delivery as ReturnType<typeof vi.fn>,
+  codeanalyse: dashboardApi.codeAnalysis as ReturnType<typeof vi.fn>,
   epics: epicsApi.list as ReturnType<typeof vi.fn>,
   laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
@@ -363,6 +364,7 @@ beforeEach(() => {
   m.fluss.mockResolvedValue(fluss())
   m.alter.mockResolvedValue(alter())
   m.auslieferung.mockResolvedValue(auslieferung())
+  m.codeanalyse.mockResolvedValue({ hasMeasurements: false, dataSince: null, weeks: [] })
   m.prognose.mockResolvedValue({ throughputDays: 20, epics: [vorhersage(1, 'Nachtlauf-Auswertung', 7, 9), vorhersage(2, 'Erledigt', 3, 3)] })
 })
 
@@ -1134,6 +1136,38 @@ describe('LeitstandPage — Auslieferung (Issue #1836)', () => {
     expect(screen.getByRole('region', { name: 'Durchsatz' })).toBeInTheDocument()
     await waitFor(() => expect(m.auslieferung).toHaveBeenCalled())
     expect(screen.queryByRole('region', { name: 'Auslieferung' })).not.toBeInTheDocument()
+  })
+})
+
+describe('LeitstandPage — Codeanalyse (Issue #2280)', () => {
+  it('stellt „Codeanalyse“ als letzte Platte nach „Auslieferung“ in den Abschnitt voller Breite (E15)', async () => {
+    renderPage()
+    const platte = await screen.findByRole('region', { name: 'Codeanalyse' })
+    const auslieferungPlatte = await screen.findByRole('region', { name: 'Auslieferung' })
+    expect(m.codeanalyse).toHaveBeenCalledWith(1)
+    expect(auslieferungPlatte.compareDocumentPosition(platte) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const bereich = screen.getByTestId('leitstand-fluss')
+    expect(bereich).toContainElement(platte)
+    // Als letzte Platte: Der letzte Bereich des Abschnitts liegt in ihr.
+    expect(platte).toContainElement(within(bereich).getAllByRole('region').at(-1)!)
+    expect(within(platte).getByTestId('codeanalyse-leer')).toHaveTextContent('noch keine Messung')
+    // Die bisherigen Platten bleiben an ihrem Platz (AK 10).
+    expect(screen.getByRole('region', { name: 'Fluss' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Alter in Arbeit' })).toBeInTheDocument()
+    expect(within(auslieferungPlatte).getAllByRole('article')).toHaveLength(4)
+    expect(screen.getByRole('region', { name: 'Durchsatz' })).toBeInTheDocument()
+  })
+
+  it.each([
+    ['einem Fehler', new ApiError(500, 'Kaputt')],
+    ['403', new ApiError(403, 'Forbidden')],
+  ])('lässt die Platte bei %s still weg und die übrigen stehen', async (_name, fehler) => {
+    m.codeanalyse.mockRejectedValue(fehler)
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Auslieferung' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Fluss' })).toBeInTheDocument()
+    await waitFor(() => expect(m.codeanalyse).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Codeanalyse' })).not.toBeInTheDocument()
   })
 })
 

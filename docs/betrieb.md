@@ -1034,6 +1034,17 @@ docker compose logs manban-api | grep "Anmeldecode für"
 
 Den Code auf dem Anmeldeschirm eingeben oder den geloggten Link im Browser öffnen.
 
+**Anmeldecode und Link stehen nur im Entwicklungsbetrieb im Log** (`MANBAN_DEV_MODE=true`, im
+Basis-Stack voreingestellt, Issue #2267). Ohne ihn — etwa mit dem Betriebs-Overlay — gilt ein
+abgeschalteter Mailversand als Konfigurationsfehler: Das Log nennt nur die Adresse
+(„Anmeldecode für … nicht zugestellt"), der Code geht verloren, und die Anmeldung gelingt erst mit
+`MANBAN_MAIL_ENABLED=true`.
+
+**Dasselbe gilt für Einladungs-Links** (Issue #2291): Sie tragen den Einladungstoken und stehen nur
+im Entwicklungsbetrieb im Log. Ohne ihn nennt das Log nur das Projekt („Einladung ins Projekt …
+nicht zugestellt"), weder Adresse noch Link, und die Einladung kommt erst mit
+`MANBAN_MAIL_ENABLED=true` an.
+
 **Mit eingeschaltetem Mailversand steht der Code nie im Protokoll** — dort steht dann nur, dass
 eine Mail versandt wurde. Das ist gewollt: Wer das Protokoll lesen kann, soll sich damit nicht
 anmelden können.

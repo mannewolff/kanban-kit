@@ -50,7 +50,8 @@ gefahrlos — hoechstens 30 Sekunden lang. Endet ein anlegender Befehl mit
 derselbe Schluessel fuehrt die Wirkung hoechstens einmal aus.
 
 Der Token wird in der Web-UI erzeugt (Einstellungen -> Kanban-Tokens) und mit
-'tbx auth logout' bzw. in der Web-UI widerrufen.
+'tbx auth logout' bzw. in der Web-UI widerrufen. Er geht nur ueber HTTPS hinaus;
+http:// ist allein fuer localhost, 127.0.0.0/8 und [::1] erlaubt.
 
 Default (Produktion): --host ${PROD_DEFAULT_HOST}
 Dev-Beispiel: tbx auth login --host http://localhost:8080 --token tk_...
@@ -354,6 +355,41 @@ function unklarHinweis(method, path, schluessel, argv) {
     + `Schluessel fuehrt die Wirkung hoechstens einmal aus:\n  ${wiederholKommando(schluessel, argv)}`;
 }
 
+// --- Transportschutz (Issue #2268) -------------------------------------------
+
+/**
+ * Darf der Zugangsschluessel an diesen Rechner auch ohne TLS gehen? Nur an die eigene
+ * Maschine: `localhost`, 127.0.0.0/8 und `[::1]`. `hostname` stammt aus dem URL-Parser,
+ * ist also schon kleingeschrieben und ohne Benutzerteil — `http://localhost@fremd` traegt
+ * den Rechnernamen `fremd`, `http://localhost.fremd` bleibt ein fremder Name.
+ */
+export function istEigeneMaschine(hostname) {
+  if (hostname === 'localhost' || hostname === '[::1]') return true;
+  return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+}
+
+/**
+ * Prueft die Board-Adresse, BEVOR der Zugangsschluessel angehaengt wird: Er ist ein
+ * wiederverwendbarer Zugang mit den Board-Rechten seines Inhabers, und wer ihn auf der
+ * Strecke mitliest, haelt diese Rechte. Erlaubt ist HTTPS, unverschluesseltes HTTP nur zur
+ * eigenen Maschine (lokale Entwicklung). Alles andere — auch eine unlesbare Adresse — wird
+ * abgewiesen, ohne dass ein Aufruf hinausgeht.
+ */
+export function pruefeTransport(host) {
+  let url;
+  try {
+    url = new URL(host);
+  } catch {
+    throw new CliError(`Board-Adresse '${host}' ist keine gueltige URL — erwartet wird eine HTTPS-Adresse (https://<rechner>).`);
+  }
+  if (url.protocol === 'https:') return;
+  if (url.protocol === 'http:' && istEigeneMaschine(url.hostname)) return;
+  throw new CliError(
+    `Board-Adresse '${host}' abgewiesen: Der Token geht nur ueber HTTPS hinaus `
+      + '(http:// nur fuer localhost, 127.0.0.0/8 und [::1]). Bitte mit --host https://… neu anmelden.',
+  );
+}
+
 // --- API-Zugriff -------------------------------------------------------------
 
 /**
@@ -372,6 +408,7 @@ function unklarHinweis(method, path, schluessel, argv) {
  * oder der Ausgang unklar ist.
  */
 export async function tokenFetch(host, token, path, options = {}, fetchImpl = fetch, umgebung = {}) {
+  pruefeTransport(host);
   const { idempotencyKey, ...rest } = options || {};
   const uhr = umgebung.uhr || {};
   const jetzt = uhr.jetzt ?? Date.now;

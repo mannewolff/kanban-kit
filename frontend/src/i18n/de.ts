@@ -986,6 +986,47 @@ export const de = {
     WOCHEN_ARIA: (wochen: string) => `Auslieferungsversuche je Woche — ${wochen}`,
   },
 
+  /** Die Platte „Codeanalyse“ mit der Befunddichte je Kalenderwoche, `lib/codeanalyse.ts` (Plan #2272). */
+  LEITSTAND_CODEANALYSE: {
+    TITEL: 'Codeanalyse',
+    LETZTE_WOCHEN: 'letzte 12 Wochen',
+    SEIT: (datum: string) => `seit ${datum}`,
+    KOPF: (zeitraum: string) => `Kalenderwochen, ${zeitraum}`,
+    VORHER: 'vor der Codeanalyse',
+    ENDZUSTAND: 'Endzustand',
+    FEHLER: 'Fehler',
+    SICHERHEITSLUECKEN: 'Sicherheitslücken',
+    WARTBARKEITSMAENGEL: 'Wartbarkeitsmängel',
+    SUMME: 'Summe',
+    FUNDE: 'Funde',
+    ZEILEN: 'Zeilen',
+    MESSUNGEN: 'Messungen',
+    KARTEN: 'Karten',
+    DICHTE_EINHEIT: 'Funde je 1.000 Zeilen',
+    RUECKGANG: 'Rückgang der Funde',
+    LEER: 'noch keine Messung',
+    KEINE_ZAEHLENDE_WOCHE: 'In diesem Zeitraum zählt keine Messung.',
+    KEINE_DICHTE: 'keine Dichte (0 Zeilen)',
+    WOCHE_WAEHLEN: 'Eine Woche überfahren, antippen oder mit der Tastatur wählen, um alle ihre Zahlen zu sehen.',
+    NICHT_ZAEHLEND: 'nicht zählende Messungen',
+    WOCHE_ARIA: (kw: number, vorher: string, endzustand: string) =>
+      `KW ${kw}: vor der Codeanalyse ${vorher}, Endzustand ${endzustand} Funde je 1.000 Zeilen`,
+    WOCHE_LUECKE_ARIA: (kw: number) => `KW ${kw}: keine zählende Messung`,
+    WOCHE_OHNE_DICHTE_ARIA: (kw: number) => `KW ${kw}: keine Dichte (0 Zeilen)`,
+    WOCHEN_ARIA: (wochen: string) => `Befunddichte je Kalenderwoche — ${wochen}`,
+    WOCHE_TITEL: (kw: number) => `KW ${kw}`,
+    JUENGSTE_WOCHE: (kw: number) => `Jüngste Woche mit zählenden Messungen: KW ${kw}`,
+    ART: 'Art',
+    GRUENDE: {
+      'no-measurement': 'keine Messung der Codeanalyse',
+      'missing-before': 'Urteil vor der Codeanalyse fehlt',
+      'missing-final': 'Urteil über den veröffentlichten Stand fehlt',
+      'cards-removed': 'Karten vor dem Veröffentlichen herausgenommen',
+      incomplete: 'Messung unvollständig',
+      'not-attributable': 'Funde nicht zuzuordnen',
+    },
+  },
+
   /** Textrechnung der Verbrauchs-Auswertung, `lib/verbrauchZeitraum.ts` (Issue #1656). */
   VERBRAUCH_ZEITRAUM: {
     KEIN_LAUF: 'In diesem Zeitraum hat weder ein Run noch eine Sitzung stattgefunden.',

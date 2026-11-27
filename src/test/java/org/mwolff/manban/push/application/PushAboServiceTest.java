@@ -35,7 +35,7 @@ class PushAboServiceTest {
 
   private static final Instant JETZT = Instant.parse("2026-10-29T10:00:00Z");
   private static final SitzungsEnde SITZUNG = new SitzungsEnde(JETZT.plus(Duration.ofDays(30)));
-  private static final String ENDPUNKT = "https://push.example/geraet-1";
+  private static final String ENDPUNKT = "https://fcm.googleapis.com/fcm/send/geraet-1";
   private static final long ICH = 42L;
   private static final long ANDERER = 43L;
   private static final long PROJEKT = 7L;
@@ -146,6 +146,20 @@ class PushAboServiceTest {
     // Then
     assertThat(gespeichert.get(ENDPUNKT))
         .isEqualTo(new PushAbo(1L, ICH, ENDPUNKT, "p", "a", JETZT, SITZUNG.expiresAt(), Set.of()));
+  }
+
+  /**
+   * Der Angriff aus dem Sicherheitsbefund (Issue #2290): Ein angemeldetes Konto setzt als
+   * Push-Adresse ein Ziel im Netz des Servers. Es entsteht kein Abo, also auch keine spätere
+   * Verbindung dorthin.
+   */
+  @Test
+  void abonniere_zielImServernetz_wirdAbgewiesenUndNichtGespeichert() {
+    for (String ziel : List.of("https://127.0.0.1:8443/internal", "https://10.0.0.1/admin")) {
+      assertThatThrownBy(() -> service.abonniere(ICH, ziel, "p", "a", SITZUNG))
+          .isInstanceOf(PushDienstUnbekanntException.class);
+    }
+    assertThat(gespeichert).isEmpty();
   }
 
   @Test

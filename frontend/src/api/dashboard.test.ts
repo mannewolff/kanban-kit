@@ -165,3 +165,56 @@ describe('dashboardApi.delivery (Issue #1836)', () => {
     expect(result).toEqual(auslieferung)
   })
 })
+
+describe('dashboardApi.codeAnalysis (Issue #2278)', () => {
+  it('ruft GET /api/boards/{id}/dashboard/code-analysis', async () => {
+    const codeanalyse = {
+      hasMeasurements: true,
+      dataSince: '2026-10-14T08:30:00Z',
+      weeks: [
+        {
+          weekStart: '2026-11-23T00:00:00Z',
+          countingMeasurements: 2,
+          cards: 5,
+          before: {
+            bugs: 2,
+            vulnerabilities: 1,
+            codeSmells: 5,
+            findings: 8,
+            changedLines: 2000,
+            bugsDensity: 1,
+            vulnerabilitiesDensity: 0.5,
+            codeSmellsDensity: 2.5,
+            findingsDensity: 4,
+          },
+          final: {
+            bugs: 0,
+            vulnerabilities: 0,
+            codeSmells: 2,
+            findings: 2,
+            changedLines: 2000,
+            bugsDensity: 0,
+            vulnerabilitiesDensity: 0,
+            codeSmellsDensity: 1,
+            findingsDensity: 1,
+          },
+          reductionPercent: 75,
+          notCounting: [{ reason: 'missing-final', count: 1 }],
+        },
+      ],
+    }
+    const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: () => Promise.resolve(JSON.stringify(codeanalyse)),
+    } as Response)
+
+    const result = await dashboardApi.codeAnalysis(7)
+
+    const [url, init] = f.mock.calls[f.mock.calls.length - 1]
+    expect(url).toBe('/api/boards/7/dashboard/code-analysis')
+    expect(init?.method).toBeUndefined()
+    expect(result).toEqual(codeanalyse)
+  })
+})

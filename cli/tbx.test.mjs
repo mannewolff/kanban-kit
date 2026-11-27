@@ -219,8 +219,8 @@ test('tokenFetch: setzt X-Kanban-Token-Header', async () => {
     captured = { url, opts };
     return jsonResponse(200, {});
   };
-  await tokenFetch('http://h', 'tk_abc', '/api/kanban/items', {}, fetchImpl);
-  assert.equal(captured.url, 'http://h/api/kanban/items');
+  await tokenFetch('https://h', 'tk_abc', '/api/kanban/items', {}, fetchImpl);
+  assert.equal(captured.url, 'https://h/api/kanban/items');
   assert.equal(captured.opts.headers['X-Kanban-Token'], 'tk_abc');
 });
 
@@ -235,14 +235,14 @@ test('apiFetch: ohne Login -> AuthError not_logged_in', async () => {
 
 test('apiFetch: sendet gespeicherten Token', async () => {
   await withTempConfigDir(async (dir) => {
-    seedLogin(dir, 'http://h', 'tk_stored');
+    seedLogin(dir, 'https://h', 'tk_stored');
     let captured;
     const fetchImpl = async (url, opts) => {
       captured = { url, opts };
       return jsonResponse(200, {});
     };
     await apiFetch('/api/kanban/items', {}, { baseDir: dir, fetchImpl });
-    assert.equal(captured.url, 'http://h/api/kanban/items');
+    assert.equal(captured.url, 'https://h/api/kanban/items');
     assert.equal(captured.opts.headers['X-Kanban-Token'], 'tk_stored');
   });
 });
@@ -272,7 +272,7 @@ test('auth login: ungueltiger Token (401) speichert nichts', async () => {
   await withTempConfigDir(async (dir) => {
     const fetchImpl = async () => jsonResponse(401, {});
     const i = io({ baseDir: dir, fetchImpl, env: { TBX_TOKEN: 'tk_bad' } });
-    const code = await main(['auth', 'login', '--host', 'http://h'], i);
+    const code = await main(['auth', 'login', '--host', 'https://h'], i);
 
     assert.equal(code, 1);
     assert.match(i.stderrLines.join(''), /ungültig|widerrufen/i);
@@ -284,7 +284,7 @@ test('auth login: Server-Fehler (500) speichert nichts', async () => {
   await withTempConfigDir(async (dir) => {
     const fetchImpl = async () => jsonResponse(500, {});
     const i = io({ baseDir: dir, fetchImpl, env: { TBX_TOKEN: 'tk_x' } });
-    const code = await main(['auth', 'login', '--host', 'http://h'], i);
+    const code = await main(['auth', 'login', '--host', 'https://h'], i);
     assert.equal(code, 1);
     assert.equal(existsSync(tokensPath(dir)), false);
   });
@@ -302,7 +302,7 @@ test('auth status: nicht angemeldet -> Exit 1', async () => {
 
 test('auth status: gueltiger Token -> valid true, Exit 0', async () => {
   await withTempConfigDir(async (dir) => {
-    seedLogin(dir, 'http://h', 'tk_ok');
+    seedLogin(dir, 'https://h', 'tk_ok');
     const i = io({ baseDir: dir, fetchImpl: async () => jsonResponse(200, {}) });
     assert.equal(await main(['auth', 'status'], i), 0);
     assert.match(i.stdoutLines.join(''), /"valid": true/);
@@ -311,7 +311,7 @@ test('auth status: gueltiger Token -> valid true, Exit 0', async () => {
 
 test('auth status: widerrufener Token -> valid false, Exit 1', async () => {
   await withTempConfigDir(async (dir) => {
-    seedLogin(dir, 'http://h', 'tk_revoked');
+    seedLogin(dir, 'https://h', 'tk_revoked');
     const i = io({ baseDir: dir, fetchImpl: async () => jsonResponse(401, {}) });
     assert.equal(await main(['auth', 'status'], i), 1);
     assert.match(i.stdoutLines.join(''), /"valid": false/);
@@ -440,7 +440,7 @@ test('issue get: unbekannte Nummer -> Exit 1', async () => {
 
 test('issue create: POST BACKLOG, liefert Nummer + url', async () => {
   await withTempConfigDir(async (dir) => {
-    seedLogin(dir, 'http://h', 'tk_c');
+    seedLogin(dir, 'https://h', 'tk_c');
     let captured;
     const fetchImpl = async (url, opts) => {
       captured = { url, opts };
@@ -448,9 +448,9 @@ test('issue create: POST BACKLOG, liefert Nummer + url', async () => {
     };
     const i = io({ baseDir: dir, fetchImpl });
     await main(['issue', 'create', '--title', 'Neu', '--body', 'X'], i);
-    assert.equal(captured.url, 'http://h/api/kanban/items');
+    assert.equal(captured.url, 'https://h/api/kanban/items');
     assert.deepEqual(JSON.parse(captured.opts.body), { title: 'Neu', body: 'X', column: 'BACKLOG' });
-    assert.deepEqual(JSON.parse(i.stdoutLines.join('')), { id: 5, url: 'http://h/kanban' });
+    assert.deepEqual(JSON.parse(i.stdoutLines.join('')), { id: 5, url: 'https://h/kanban' });
   });
 });
 
@@ -595,7 +595,7 @@ test('Wiederholung: 429 ohne Ueberlast-type wird nicht wiederholt', async () => 
 for (const method of ['GET', 'PUT', 'DELETE']) {
   test(`Wiederholung: 5xx bei ${method} wird wiederholt`, async () => {
     const fetchImpl = folge(jsonResponse(502, {}), jsonResponse(200, { ok: true }));
-    const res = await tokenFetch('http://h', 'tk', '/p', { method }, fetchImpl, { uhr: fakeUhr() });
+    const res = await tokenFetch('https://h', 'tk', '/p', { method }, fetchImpl, { uhr: fakeUhr() });
     assert.equal(res.status, 200);
     assert.equal(fetchImpl.aufrufe.length, 2);
   });
@@ -603,7 +603,7 @@ for (const method of ['GET', 'PUT', 'DELETE']) {
 
 test('Wiederholung: 5xx bei POST mit Schluessel wird wiederholt', async () => {
   const fetchImpl = folge(jsonResponse(503, {}), jsonResponse(201, {}));
-  const res = await tokenFetch('http://h', 'tk', '/p', { method: 'POST', idempotencyKey: 'k1' }, fetchImpl, {
+  const res = await tokenFetch('https://h', 'tk', '/p', { method: 'POST', idempotencyKey: 'k1' }, fetchImpl, {
     uhr: fakeUhr(),
   });
   assert.equal(res.status, 201);
@@ -613,7 +613,7 @@ test('Wiederholung: 5xx bei POST mit Schluessel wird wiederholt', async () => {
 test('Wiederholung: 5xx bei POST ohne Schluessel wird nicht wiederholt, Ausgang unklar ohne Schluessel', async () => {
   const fetchImpl = folge(jsonResponse(502, {}), jsonResponse(201, {}));
   await assert.rejects(
-    () => tokenFetch('http://h', 'tk', '/labels', { method: 'POST' }, fetchImpl, { uhr: fakeUhr() }),
+    () => tokenFetch('https://h', 'tk', '/labels', { method: 'POST' }, fetchImpl, { uhr: fakeUhr() }),
     (e) =>
       e instanceof CliError
       && e.rueckmeldung === RUECKMELDUNG.AUSGANG_UNKLAR
@@ -626,7 +626,7 @@ test('Wiederholung: 5xx bei POST ohne Schluessel wird nicht wiederholt, Ausgang 
 for (const status of [403, 404, 409, 401]) {
   test(`Wiederholung: ${status} wird sofort zurueckgegeben`, async () => {
     const fetchImpl = folge(jsonResponse(status, { type: UEBERLAST_TYPE }), jsonResponse(200, {}));
-    const res = await tokenFetch('http://h', 'tk', '/p', { method: 'PUT' }, fetchImpl, { uhr: fakeUhr() });
+    const res = await tokenFetch('https://h', 'tk', '/p', { method: 'PUT' }, fetchImpl, { uhr: fakeUhr() });
     assert.equal(res.status, status);
     assert.equal(fetchImpl.aufrufe.length, 1);
   });
@@ -692,19 +692,19 @@ test('Ausgang unklar: Meldung nennt Schluessel und vollstaendiges Wiederholkomma
 
 test('Rueckmeldungen: ausgefuehrt, nicht ausgefuehrt, Ausgang unklar an je einem erzeugten Fall', async () => {
   assert.equal(rueckmeldungFuer({ ok: true }), RUECKMELDUNG.AUSGEFUEHRT);
-  const ok = await tokenFetch('http://h', 'tk', '/p', { method: 'POST' }, folge(jsonResponse(201, {})), {
+  const ok = await tokenFetch('https://h', 'tk', '/p', { method: 'POST' }, folge(jsonResponse(201, {})), {
     uhr: fakeUhr(),
   });
   assert.equal(rueckmeldungFuer({ ok: ok.ok, status: ok.status, method: 'POST' }), RUECKMELDUNG.AUSGEFUEHRT);
 
   await assert.rejects(
-    () => tokenFetch('http://h', 'tk', '/p', { method: 'POST' }, folge(netzfehler('ECONNREFUSED')), { uhr: fakeUhr() }),
+    () => tokenFetch('https://h', 'tk', '/p', { method: 'POST' }, folge(netzfehler('ECONNREFUSED')), { uhr: fakeUhr() }),
     (e) => e instanceof CliError && e.rueckmeldung === RUECKMELDUNG.NICHT_AUSGEFUEHRT && /nicht erreichbar/.test(e.message),
   );
 
   await assert.rejects(
     () =>
-      tokenFetch('http://h', 'tk', '/p', { method: 'POST', idempotencyKey: 'k' }, folge(netzfehler('ECONNRESET')), {
+      tokenFetch('https://h', 'tk', '/p', { method: 'POST', idempotencyKey: 'k' }, folge(netzfehler('ECONNRESET')), {
         uhr: fakeUhr(),
         argv: ['issue', 'comment', '2', '--text', 'x'],
       }),
@@ -716,7 +716,7 @@ test('Rueckmeldungen: ausgefuehrt, nicht ausgefuehrt, Ausgang unklar an je einem
 
 test('Rueckmeldungen: lesender Abbruch nach Budget ist nicht ausgefuehrt', async () => {
   await assert.rejects(
-    () => tokenFetch('http://h', 'tk', '/p', {}, folge(netzfehler('ECONNRESET')), { uhr: fakeUhr() }),
+    () => tokenFetch('https://h', 'tk', '/p', {}, folge(netzfehler('ECONNRESET')), { uhr: fakeUhr() }),
     (e) => e.rueckmeldung === RUECKMELDUNG.NICHT_AUSGEFUEHRT,
   );
 });
@@ -728,7 +728,7 @@ test('Budget: fest 30 Sekunden, auch mit gesetztem KIT_AGENT_MODEL', async () =>
     assert.equal(BUDGET_MS, 30_000);
     const uhr = fakeUhr();
     const fetchImpl = folge(jsonResponse(429, UEBERLAST));
-    const res = await tokenFetch('http://h', 'tk', '/p', {}, fetchImpl, { uhr });
+    const res = await tokenFetch('https://h', 'tk', '/p', {}, fetchImpl, { uhr });
     assert.equal(res.status, 429);
     assert.ok(uhr.zeit() <= 30_000, `gewartet: ${uhr.zeit()}`);
     assert.ok(uhr.zeit() > 20_000, `gewartet: ${uhr.zeit()}`);
@@ -741,14 +741,14 @@ test('Budget: fest 30 Sekunden, auch mit gesetztem KIT_AGENT_MODEL', async () =>
 
 test('Zeitgrenze: jeder Versuch traegt ein eigenes Abbruchsignal', async () => {
   const fetchImpl = folge(jsonResponse(200, {}));
-  await tokenFetch('http://h', 'tk', '/p', {}, fetchImpl, { uhr: fakeUhr() });
+  await tokenFetch('https://h', 'tk', '/p', {}, fetchImpl, { uhr: fakeUhr() });
   assert.ok(fetchImpl.aufrufe[0].opts.signal instanceof AbortSignal);
 });
 
 test('Zeitablauf eines Versuchs wird wiederholt', async () => {
   const zeitablauf = new DOMException('timed out', 'TimeoutError');
   const fetchImpl = folge(zeitablauf, jsonResponse(200, {}));
-  const res = await tokenFetch('http://h', 'tk', '/p', {}, fetchImpl, { uhr: fakeUhr() });
+  const res = await tokenFetch('https://h', 'tk', '/p', {}, fetchImpl, { uhr: fakeUhr() });
   assert.equal(res.status, 200);
 });
 
@@ -758,7 +758,7 @@ test('Ohne injizierte Uhr: Standard-Meldespur und echtes Schlafen', async () => 
   process.stderr.write = (s) => geschrieben.push(s);
   try {
     const fetchImpl = folge(jsonResponse(429, UEBERLAST, { 'retry-after': '0' }), jsonResponse(200, {}));
-    const res = await tokenFetch('http://h', 'tk', '/p', {}, fetchImpl);
+    const res = await tokenFetch('https://h', 'tk', '/p', {}, fetchImpl);
     assert.equal(res.status, 200);
   } finally {
     process.stderr.write = original;
@@ -811,7 +811,7 @@ test('Fehlerlage: Antwort ohne JSON und ohne Retry-After', async () => {
   };
   const fetchImpl = folge(ohneJson, jsonResponse(200, {}));
   const zeilen = [];
-  const res = await tokenFetch('http://h', 'tk', '/p', {}, fetchImpl, { uhr: fakeUhr(zeilen) });
+  const res = await tokenFetch('https://h', 'tk', '/p', {}, fetchImpl, { uhr: fakeUhr(zeilen) });
   assert.equal(res.status, 200);
   assert.match(zeilen[0], /Versuch 1 endete mit HTTP 503, erneut in 500 ms \(Frist 30 s\)/);
 });
@@ -829,7 +829,82 @@ test('Fehlerlage: der Rumpf bleibt fuer den Aufrufer lesbar (clone)', async () =
       return { json: async () => ({ message: 'weg' }) };
     },
   };
-  const res = await tokenFetch('http://h', 'tk', '/p', {}, folge(antwort), { uhr: fakeUhr() });
+  const res = await tokenFetch('https://h', 'tk', '/p', {}, folge(antwort), { uhr: fakeUhr() });
   assert.equal(gelesen, 0);
   assert.deepEqual(await res.json(), { message: 'weg' });
 });
+
+// --- Transportschutz: Zugangsschluessel nie unverschluesselt (Issue #2268) ----
+
+/** Zeichnet jeden Versand auf — der "Mitleser auf der Strecke" sieht genau, was hier landet. */
+function mitleser() {
+  const gesehen = [];
+  const fetchImpl = async (url, opts) => {
+    gesehen.push({ url, token: opts?.headers?.['X-Kanban-Token'] });
+    return jsonResponse(200, {});
+  };
+  return { gesehen, fetchImpl };
+}
+
+for (const host of [
+  'http://board.example',
+  'HTTP://board.example',
+  'http://board.example:8080',
+  'http://localhost@board.example',
+  'http://localhost.board.example',
+  'http://127.0.0.1.board.example',
+  'ftp://board.example',
+  'board.example',
+  'kein url',
+]) {
+  test(`Angriff: entfernte Adresse ohne TLS (${host}) bekommt keinen Zugangsschluessel`, async () => {
+    const { gesehen, fetchImpl } = mitleser();
+    await assert.rejects(
+      () => tokenFetch(host, 'tk_geheim', '/api/kanban/items', {}, fetchImpl, { uhr: fakeUhr() }),
+      (e) => e instanceof CliError && e.rueckmeldung === RUECKMELDUNG.NICHT_AUSGEFUEHRT && /HTTPS/.test(e.message),
+    );
+    assert.deepEqual(gesehen, [], 'kein Versand, also kein Token auf der Strecke');
+  });
+}
+
+test('Angriff: auth login mit http-Adresse sendet den Token nicht und speichert nichts', async () => {
+  await withTempConfigDir(async (dir) => {
+    const { gesehen, fetchImpl } = mitleser();
+    const i = io({ baseDir: dir, fetchImpl });
+    const code = await main(['auth', 'login', '--host', 'http://board.example', '--token', 'tk_geheim'], i);
+    assert.equal(code, 1);
+    assert.deepEqual(gesehen, []);
+    assert.match(i.stderrLines.join(''), /HTTPS/);
+    assert.equal(existsSync(tokensPath(dir)), false);
+    assert.equal(existsSync(configPath(dir)), false);
+  });
+});
+
+test('Angriff: gespeicherte http-Adresse (Altbestand) sendet den Token bei keinem Befehl', async () => {
+  await withTempConfigDir(async (dir) => {
+    seedLogin(dir, 'http://board.example', 'tk_geheim');
+    const { gesehen, fetchImpl } = mitleser();
+    for (const argv of [['issue', 'list'], ['issue', 'get', '1'], ['auth', 'status']]) {
+      const i = io({ baseDir: dir, fetchImpl });
+      assert.equal(await main(argv, i), 1, argv.join(' '));
+    }
+    assert.deepEqual(gesehen, []);
+  });
+});
+
+for (const host of [
+  'https://board.example',
+  'https://board.example:8443',
+  'http://localhost:8080',
+  'http://LOCALHOST:5173',
+  'http://127.0.0.1:8080',
+  'http://127.1.2.3',
+  'http://[::1]:8080',
+]) {
+  test(`Transportschutz: ${host} ist erlaubt und erhaelt den Token`, async () => {
+    const { gesehen, fetchImpl } = mitleser();
+    const res = await tokenFetch(host, 'tk_ok', '/api/kanban/items', {}, fetchImpl, { uhr: fakeUhr() });
+    assert.equal(res.status, 200);
+    assert.deepEqual(gesehen, [{ url: `${host}/api/kanban/items`, token: 'tk_ok' }]);
+  });
+}

@@ -124,7 +124,7 @@ class LaufMeldeServiceIT extends AbstractIntegrationTest {
     String owner = "meldung-owner@example.com";
     long projectId = projectOf(owner, "meldung-admin@example.com");
     long boardId = boards.createBoard(userId(owner), projectId, "Produkt").id();
-    String endpoint = "https://push.example/meldung-geraet";
+    String endpoint = "https://fcm.googleapis.com/fcm/send/meldung-geraet";
     abonniere(anmeldung.anmelden(owner, PlatformRole.USER), endpoint);
     long aboId =
         jdbc.queryForObject("SELECT id FROM push_abo WHERE endpoint = ?", Long.class, endpoint);

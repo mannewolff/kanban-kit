@@ -17,6 +17,34 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.22.0] – 2026-11-27
+
+- chore: v3.21.2
+- Prüfgrenze vor dem Veröffentlichen auf 40 Minuten angehoben ([#2294](https://github.com/mannewolff/kanban-kit/issues/2294))
+- Release-Actions an volle Commit-SHAs gebunden ([#2292](https://github.com/mannewolff/kanban-kit/issues/2292))
+- Einladungslink im Protokoll nur im Entwicklungsbetrieb ([#2291](https://github.com/mannewolff/kanban-kit/issues/2291))
+- Push-Adressen nur noch zu Push-Diensten der Browser ([#2290](https://github.com/mannewolff/kanban-kit/issues/2290))
+- Mutations-Überlebende in codeanalyse.ts getötet ([#2289](https://github.com/mannewolff/kanban-kit/issues/2289))
+- Mutationsprüfung Frontend: Vorlauf von Stryker mit 20 Minuten Zeit ([#2287](https://github.com/mannewolff/kanban-kit/issues/2287))
+- Mutations-Überlebende der Codeanalyse-Platte getötet ([#2288](https://github.com/mannewolff/kanban-kit/issues/2288))
+- Abdeckung: unerreichbare Zweige in ZaehlregelValidator entfernt ([#2285](https://github.com/mannewolff/kanban-kit/issues/2285))
+- Mutationsprüfung: äquivalenten Mutanten in BefunddichteErmittlung entfernt ([#2284](https://github.com/mannewolff/kanban-kit/issues/2284))
+- Code-Review: Mindesthöhe und Vorzeichen kleiner Werte der Codeanalyse ([#2283](https://github.com/mannewolff/kanban-kit/issues/2283))
+- Installation kit Version 6.3.8
+- Codeanalyse: Doku der Platte und des Meldewegs ([#2281](https://github.com/mannewolff/kanban-kit/issues/2281))
+- Codeanalyse: Platte im Leitstand ([#2280](https://github.com/mannewolff/kanban-kit/issues/2280))
+- Codeanalyse: Szenarien des Fachplans als Integrationstest ([#2279](https://github.com/mannewolff/kanban-kit/issues/2279))
+- Codeanalyse: Daten, Formate und Texte im Frontend ([#2278](https://github.com/mannewolff/kanban-kit/issues/2278))
+- Codeanalyse: Meldeweg POST /api/kanban/code-analysis-measurements ([#2277](https://github.com/mannewolff/kanban-kit/issues/2277))
+- Codeanalyse: Wochenwerte für den Leitstand lesen ([#2276](https://github.com/mannewolff/kanban-kit/issues/2276))
+- Codeanalyse: Meldung annehmen im Dienst ([#2275](https://github.com/mannewolff/kanban-kit/issues/2275))
+- Codeanalyse: Messungen speichern ([#2274](https://github.com/mannewolff/kanban-kit/issues/2274))
+- Codeanalyse: Kalenderwochen und Befunddichte rechnen ([#2273](https://github.com/mannewolff/kanban-kit/issues/2273))
+- chore: v3.21.1
+- ProfilePage-Test wartet auf die Vorschau-Eintraege ([#2270](https://github.com/mannewolff/kanban-kit/issues/2270))
+- CLI sendet den Zugangsschluessel nur ueber HTTPS ([#2268](https://github.com/mannewolff/kanban-kit/issues/2268))
+- Anmeldecode im Protokoll nur im Entwicklungsbetrieb ([#2267](https://github.com/mannewolff/kanban-kit/issues/2267))
+
 ## [3.21.0] – 2026-11-25
 
 - chore: v3.20.1

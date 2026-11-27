@@ -1,0 +1,10 @@
+/**
+ * Persistenz-Adapter des Moduls {@code codeanalyse} (JDBC, Issue #2274).
+ *
+ * <p>{@code @NullMarked} (Issue #0080): Alle Referenzen in diesem Package sind per Default
+ * non-null; Ausnahmen tragen explizit {@code @Nullable} (CLAUDE-java.md §6.2).
+ */
+@NullMarked
+package org.mwolff.manban.codeanalyse.infrastructure.persistence;
+
+import org.jspecify.annotations.NullMarked;

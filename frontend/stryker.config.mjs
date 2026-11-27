@@ -24,5 +24,10 @@ export default {
   htmlReporter: { fileName: '../.claude/stryker/mutation.html' },
   jsonReporter: { fileName: '../.claude/stryker/mutation.json' },
   concurrency: 4,
+  // Der Vorlauf (`initial test run`) läuft im Vitest-Runner von Stryker in einem einzigen Thread
+  // (`maxThreads: 1`) mit Deckungsmessung je Test. Der Testumfang der aufgenommenen Ausschnitte
+  // braucht dort mehr als Strykers Vorgabe von 5 Minuten, und der Lauf brach ab, bevor ein Mutant
+  // gemessen war (Issue #2287). 20 Minuten lassen Abstand für weiteres Wachstum und Last.
+  dryRunTimeoutMinutes: 20,
   thresholds: { high: 100, low: 90, break: null },
 }

@@ -12,6 +12,7 @@ import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectService;
 import org.mwolff.manban.project.application.ProjectService.AccessibleProject;
 import org.mwolff.manban.push.domain.PushAbo;
+import org.mwolff.manban.push.domain.PushDienst;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -70,12 +71,17 @@ public class PushAboService {
    * Legt das Abo dieses Geräts an oder frischt es auf: neue Schlüssel, {@code gilt_bis} aus dem
    * Sitzungsende (E14). Ein abgelaufenes eigenes Abo beginnt dabei neu.
    *
+   * @throws PushDienstUnbekanntException wenn der Endpunkt auf keinen Push-Dienst zeigt, etwa auf
+   *     ein Ziel im Netz des Servers (Issue #2290)
    * @throws PushAboVergebenException wenn der Endpunkt zum laufenden Abo eines anderen Kontos
    *     gehört
    */
   @Transactional
   public void abonniere(
       long userId, String endpoint, String p256dh, String auth, SitzungsEnde sitzungsEnde) {
+    if (!PushDienst.erlaubt(endpoint)) {
+      throw new PushDienstUnbekanntException();
+    }
     Instant jetzt = clock.instant();
     Instant giltBis = sitzungsEnde.expiresAt();
     PushAbo vorhanden = abos.findByEndpoint(endpoint).orElse(null);

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { boardsApi, type Board } from '../api/boards'
 import { ApiError, istVorschauVerborgen } from '../api/client'
-import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type DeliveryView, type EpicForecast } from '../api/dashboard'
+import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type CodeAnalysisView, type DeliveryView, type EpicForecast } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunErrorClassCounts, type NightRunModels, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { vorhabenKostenApi, type VorhabenKostenView } from '../api/vorhabenKosten'
@@ -86,6 +86,8 @@ export interface LeitstandDaten {
   kosten: Laden<VorhabenKostenView[] | null>
   /** Die Platte „Auslieferung“ (Issue #1836) mit den Daten des ganzen Projekts; lädt sofort zum Board. */
   auslieferung: Laden<DeliveryView>
+  /** Die Platte „Codeanalyse“ (Issue #2278) mit den Daten des ganzen Projekts; lädt sofort zum Board. */
+  codeanalyse: Laden<CodeAnalysisView>
   epics: Laden<Epic[]>
   klassen: Laden<NightRunErrorClassCounts>
   /** Die Nacharbeit der Runs auf diesem Board (Issue #1760); ohne Run-Recht `ohneRecht`. */
@@ -107,7 +109,7 @@ export interface LeitstandDaten {
  * Lädt die Daten des Leitstands zu einem Board und leitet die Sichtwerte ab (Issue #1053).
  *
  * Die Läufe, die Fehlerklassen und damit der Verbrauch hängen am Projekt des Boards und beginnen
- * erst, wenn das Board da ist; Nacharbeit, Modelle, Fluss, Alter, Prognose und Auslieferung hängen am Board selbst und laden sofort. Wer die
+ * erst, wenn das Board da ist; Nacharbeit, Modelle, Fluss, Alter, Prognose, Auslieferung und Codeanalyse hängen am Board selbst und laden sofort. Wer die
  * Läufe nicht sehen darf, bekommt vom Server 403 — das bleibt als `ohneRecht` still, und die Seite
  * lässt die Lauf-Bereiche weg. In der „Ansicht als XY“ antwortet er dort, wo XY sähe, was der Admin
  * nicht sehen darf, mit `403 vorschau-verborgen`; daraus wird `vorschauVerborgen`, und die Seite
@@ -125,6 +127,7 @@ export function useLeitstandDaten(boardId: string | undefined): LeitstandDaten {
   const prognose = useLadenWenn(gueltigeId, (bid) => dashboardApi.epicForecast(bid), [gueltigeId])
   const kosten = useLadenWenn(gueltigeId, (bid) => vorhabenKostenApi.jeBoard(bid), [gueltigeId])
   const auslieferung = useLadenWenn(gueltigeId, (bid) => dashboardApi.delivery(bid), [gueltigeId])
+  const codeanalyse = useLadenWenn(gueltigeId, (bid) => dashboardApi.codeAnalysis(bid), [gueltigeId])
   const epics = useLadenWenn(gueltigeId, (bid) => epicsApi.list(bid), [gueltigeId])
   const nacharbeit = useLadenWenn(gueltigeId, (bid) => nightRunsApi.rework(bid), [gueltigeId])
   const modelle = useLadenWenn(gueltigeId, (bid) => nightRunsApi.models(bid), [gueltigeId])
@@ -138,5 +141,5 @@ export function useLeitstandDaten(boardId: string | undefined): LeitstandDaten {
 
   const laeufeVerborgen = laeufe.art === 'vorschauVerborgen'
 
-  return { validId: gueltigeId !== null, board, kpis, fluss, alter, prognose, kosten, auslieferung, epics, klassen, nacharbeit, modelle, projectId, liste, juengster, laeufeVerborgen, epicListe }
+  return { validId: gueltigeId !== null, board, kpis, fluss, alter, prognose, kosten, auslieferung, codeanalyse, epics, klassen, nacharbeit, modelle, projectId, liste, juengster, laeufeVerborgen, epicListe }
 }

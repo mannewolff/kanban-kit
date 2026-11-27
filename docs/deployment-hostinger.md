@@ -64,7 +64,7 @@ docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose
      als öffentlich bekannten Standard ab, und sie kommt dann nicht hoch (Issue #1243).
    - Mail (Strato): `MANBAN_MAIL_ENABLED=true`, `MANBAN_SMTP_*`, `MANBAN_MAIL_FROM=info@mwolff.org`,
      echtes SMTP-Passwort. Ohne echten Mailversand können sich Nutzer nicht selbst anmelden
-     (Anmeldecodes landen nur im Log).
+     (ohne Entwicklungsbetrieb kommt dann gar kein Anmeldecode an).
    - `MANBAN_BOOTSTRAP_ADMIN_TOKEN=<Zufallswert>` — für den ersten Admin.
 
    > **⚠️ Sonderzeichen in Secrets (`$`).** Docker Compose interpoliert `$` in `.env`-Werten.
@@ -144,7 +144,7 @@ docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose
      als öffentlich bekannten Standard ab, und sie kommt dann nicht hoch (Issue #1243).
    - Mail (Strato): `MANBAN_MAIL_ENABLED=true`, `MANBAN_SMTP_*`, `MANBAN_MAIL_FROM=info@mwolff.org`,
      echtes SMTP-Passwort. Ohne echten Mailversand können sich Nutzer nicht selbst anmelden
-     (Anmeldecodes landen nur im Log).
+     (ohne Entwicklungsbetrieb kommt dann gar kein Anmeldecode an).
    - `MANBAN_BOOTSTRAP_ADMIN_TOKEN=<Zufallswert>` — für den ersten Admin.
 
    > **⚠️ Sonderzeichen in Secrets (`$`).** Docker Compose interpoliert `$` in `.env`-Werten.

@@ -23,6 +23,7 @@ import org.mwolff.manban.push.application.LaufNachricht;
 import org.mwolff.manban.push.application.PushAboRepository;
 import org.mwolff.manban.push.application.PushProperties;
 import org.mwolff.manban.push.domain.PushAbo;
+import org.mwolff.manban.push.domain.PushDienst;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,6 +49,10 @@ import org.springframework.stereotype.Component;
  * Kennung, die nicht scheitert, wenn die Zeile schon fehlt. Jeder andere Status und jeder
  * Verbindungsfehler wirft, und die Outbox wiederholt mit Abstand; eine Wiederholung erzeugt keine
  * zweite Nachricht, weil der Schlüssel je Lauf und Abo eindeutig ist.
+ *
+ * <p><b>Nur an Push-Dienste (Issue #2290).</b> Bevor eine Verbindung entsteht, prüft der Handler
+ * den Endpunkt gegen {@link PushDienst}. Ein Abo, das auf ein anderes Ziel zeigt — etwa in das Netz
+ * des Servers, angelegt vor dieser Prüfung —, bekommt nichts und wird gelöscht wie bei 404.
  *
  * <p>Ohne VAPID-Schlüssel ist Push aus (E16): Dann verwirft der Handler die Nachricht mit einer
  * Protokollzeile, statt sie in den Wiederholungszyklus zu schicken.
@@ -143,6 +148,12 @@ class LaufNachrichtHandler implements OutboxHandler {
           "Nachricht zu Lauf {} an Abo {} entfällt: Abo, Konto oder Recht bestehen nicht mehr",
           nachricht.laufId(),
           nachricht.aboId());
+      return;
+    }
+    if (!PushDienst.erlaubt(abo.endpoint())) {
+      abos.deleteById(abo.requireId());
+      log.warn(
+          "Abo {} zeigt auf keinen Push-Dienst, nichts gesendet, Abo gelöscht", abo.requireId());
       return;
     }
     int status = senden(zustellung, abo, klartext(nachricht));

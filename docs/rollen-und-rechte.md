@@ -252,6 +252,13 @@ neues Recht entsteht nicht. Geprüft wird bei jedem Aufruf: Ist der Inhaber nur 
 das Board mit **403**; ist er kein Mitglied des Projekts mehr, mit **404**. Ein **ungebundenes** Token
 erhält **409** wie auf der übrigen Kanban-Compat-API; seine Meldung erscheint in keinem Projekt.
 
+**Messungen der Codeanalyse melden** (siehe [Platte Codeanalyse](nutzung.md#platte-codeanalyse))
+geht über `POST /api/kanban/code-analysis-measurements` unter derselben Bedingung: nur ein
+**board-gebundenes** Token, dessen Inhaber im Projekt des Boards `TICKET_CREATE` hat, mit denselben
+Antworten **403**, **404** und **409**. Wie die Auslieferungen bleibt der Meldeweg auch bei einem
+[Board in einem fremden System](fremdes-board.md) erlaubt: Die Meldung ändert keine Karte, sie speist
+nur den Leitstand.
+
 ### Zugang der Desktop-App
 
 Der Zugang der Desktop-App ist ein board-gebundenes Token. Hält ihn ein Admin oder Owner, trägt er
